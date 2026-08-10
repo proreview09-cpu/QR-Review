@@ -36,10 +36,17 @@ app.use('/api/public', reviewRoutes);
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
+console.log('Frontend dist path:', frontendDist);
+console.log('Dist exists:', require('fs').existsSync(frontendDist));
 app.use(express.static(frontendDist));
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(frontendDist, 'index.html'));
+    const indexPath = path.join(frontendDist, 'index.html');
+    if (require('fs').existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).json({ message: 'Frontend not built. Run npm run build first.' });
+    }
   }
 });
 
