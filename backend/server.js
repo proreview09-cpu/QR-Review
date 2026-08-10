@@ -1,6 +1,11 @@
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
+
+console.log('ENV CHECK - MONGO_URI exists:', !!process.env.MONGO_URI);
+console.log('ENV CHECK - JWT_SECRET exists:', !!process.env.JWT_SECRET);
+console.log('ENV CHECK - NODE_ENV:', process.env.NODE_ENV);
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
