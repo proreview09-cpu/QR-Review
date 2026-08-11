@@ -81,7 +81,9 @@ exports.createShop = async (req, res) => {
       owner: owner._id,
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:5175';
+    const frontendUrl = `${protocol}://${host}`;
     const { url, qrDataUrl } = await generateQR(shop._id.toString(), frontendUrl);
     shop.qrCodeData = qrDataUrl;
     await shop.save();
@@ -153,10 +155,12 @@ exports.getShop = async (req, res) => {
       { $group: { _id: null, totalTokens: { $sum: '$totalTokens' }, totalCalls: { $sum: 1 } } },
     ]);
 
-    // Always regenerate QR with current FRONTEND_URL
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5175';
-    console.log('getShop - FRONTEND_URL:', frontendUrl);
-    const { qrDataUrl, url: reviewUrl } = await generateQR(shop._id.toString(), frontendUrl);
+    // Generate QR using request domain (auto-detects Railway URL)
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:5175';
+    const frontendUrl = `${protocol}://${host}`;
+    console.log('QR Generation - Detected URL:', frontendUrl);
+    const { qrDataUrl } = await generateQR(shop._id.toString(), frontendUrl);
     shop.qrCodeData = qrDataUrl;
     await shop.save();
 

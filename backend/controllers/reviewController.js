@@ -13,7 +13,9 @@ exports.getShopPublic = async (req, res) => {
       .limit(50)
       .select('_id content');
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:5175';
+    const frontendUrl = `${protocol}://${host}`;
 
     res.json({
       shop: {

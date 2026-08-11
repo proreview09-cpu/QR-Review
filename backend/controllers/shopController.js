@@ -12,7 +12,9 @@ exports.getMyShop = async (req, res) => {
       { $group: { _id: null, total: { $sum: 1 }, used: { $sum: { $cond: ['$isUsed', 1, 0] } } } },
     ]);
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:5175';
+    const frontendUrl = `${protocol}://${host}`;
     res.json({
       shop,
       reviewLink: `${frontendUrl}/review/${shop._id}`,
