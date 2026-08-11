@@ -153,6 +153,14 @@ exports.getShop = async (req, res) => {
       { $group: { _id: null, totalTokens: { $sum: '$totalTokens' }, totalCalls: { $sum: 1 } } },
     ]);
 
+    // Always regenerate QR with current FRONTEND_URL
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const { qrDataUrl } = await generateQR(shop._id.toString(), frontendUrl);
+    if (shop.qrCodeData !== qrDataUrl) {
+      shop.qrCodeData = qrDataUrl;
+      await shop.save();
+    }
+
     res.json({
       shop,
       stats: {

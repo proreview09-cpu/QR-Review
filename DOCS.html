@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QR Google Review - Documentation</title>
+<style>
+  @page { margin: 1in; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; max-width: 850px; margin: 0 auto; padding: 40px; color: #1a1a2e; }
+  h1 { color: #4f46e5; border-bottom: 3px solid #4f46e5; padding-bottom: 10px; font-size: 28px; }
+  h2 { color: #6d28d9; border-bottom: 2px solid #e0e7ff; padding-bottom: 6px; margin-top: 32px; font-size: 22px; }
+  h3 { color: #9333ea; margin-top: 24px; font-size: 18px; }
+  h4 { color: #a855f7; font-size: 15px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px; }
+  th { background: #4f46e5; color: white; padding: 10px 14px; text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 10px 14px; border-bottom: 1px solid #e5e7eb; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #db2777; }
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 24px 0; }
+  ol, ul { padding-left: 24px; }
+  li { margin: 6px 0; }
+  strong { color: #1e293b; }
+  .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #94a3b8; font-size: 12px; text-align: center; }
+  @media print {
+    body { padding: 0; }
+    h2, h3 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>QR Google Review - Documentation</h1>
+
+<h2>Overview</h2>
+<p>QR Google Review helps businesses collect Google reviews easily. Customers scan a QR code, pick an AI-generated review, copy it, and paste it on Google. No more asking customers to write reviews from scratch!</p>
+
+<hr>
+
+<h2>Admin Guide</h2>
+
+<h3>Login</h3>
+<ul>
+  <li>URL: <code>https://your-app.railway.app/login</code></li>
+  <li>Email: <code>pro.review09@gmail.com</code> (or your admin email)</li>
+  <li>Password: Your admin password</li>
+</ul>
+
+<h3>Dashboard</h3>
+<p>Shows overview of:</p>
+<ul>
+  <li>Total Shops, Active Shops, Shop Owners</li>
+  <li>Reviews Copied (customer activity)</li>
+  <li>ChatGPT Usage: API Calls, Tokens Used, Reviews Generated</li>
+  <li>Recent Shops list</li>
+</ul>
+
+<h3>Settings</h3>
+<p>Configure global defaults:</p>
+<table>
+<tr><th>Field</th><th>Description</th></tr>
+<tr><td>OpenAI API Key</td><td>Your ChatGPT API key from platform.openai.com</td></tr>
+<tr><td>Default Review Tone</td><td>Tone applied to new shops (Professional/Friendly/Casual/etc)</td></tr>
+<tr><td>Default Review Language</td><td>English / Gujarati / Hindi</td></tr>
+</table>
+
+<h3>Managing Shops</h3>
+
+<h4>Add New Shop</h4>
+<p><code>Admin -> Shops -> Add Shop</code></p>
+
+<p><strong>Owner Details:</strong></p>
+<table>
+<tr><th>Field</th><th>Description</th></tr>
+<tr><td>Owner Name</td><td>Shop owner's full name</td></tr>
+<tr><td>Owner Email</td><td>Login email for shop owner</td></tr>
+<tr><td>Password</td><td>Login password (leave empty for default)</td></tr>
+</table>
+
+<p><strong>Business Details:</strong></p>
+<table>
+<tr><th>Field</th><th>Description</th></tr>
+<tr><td>Business Name</td><td>Full business name as on Google</td></tr>
+<tr><td>Shop Display Name</td><td>Short name shown to customers</td></tr>
+<tr><td>Phone</td><td>Contact number</td></tr>
+<tr><td>Address</td><td>Full address</td></tr>
+<tr><td>Google Review URL</td><td>From Google Business Profile -> Ask for Reviews -> Copy link</td></tr>
+</table>
+
+<p><strong>Review Settings:</strong></p>
+<table>
+<tr><th>Field</th><th>Description</th></tr>
+<tr><td>Review Tone</td><td>AI review style (Professional/Friendly/Casual/Enthusiastic/Grateful/Humorous)</td></tr>
+<tr><td>Review Language</td><td>English / Gujarati / Hindi</td></tr>
+<tr><td>Allow owner to change tone</td><td>If checked, shop owner can modify tone and language</td></tr>
+<tr><td>Pool Size (Queue)</td><td>Minimum reviews always available (default: 50)</td></tr>
+<tr><td>Generate Batch</td><td>Reviews generated at once (default: 50)</td></tr>
+</table>
+
+<h4>View Shop Details</h4>
+<p><code>Admin -> Shops -> Click shop name</code></p>
+<p>Shows:</p>
+<ul>
+  <li><strong>Stats:</strong> Total / Available / Copied / Posted reviews</li>
+  <li><strong>ChatGPT Usage:</strong> API Calls and Tokens used for this shop</li>
+  <li><strong>QR Code:</strong> Display and download</li>
+  <li><strong>Review Link:</strong> Copy and share with customers</li>
+  <li><strong>Review Activity:</strong> Which reviews were copied, when, from which device, posted or pending</li>
+  <li><strong>Edit Fields:</strong> All business and review settings editable</li>
+</ul>
+
+<h3>Activity Logs</h3>
+<p><code>Admin -> Logs</code></p>
+<p>Tracks everything:</p>
+<table>
+<tr><th>Action</th><th>What it tracks</th></tr>
+<tr><td>CREATE</td><td>Shop/owner created</td></tr>
+<tr><td>UPDATE</td><td>Shop updated</td></tr>
+<tr><td>DELETE</td><td>Shop deleted</td></tr>
+<tr><td>LOGIN</td><td>Who logged in, IP address</td></tr>
+<tr><td>ERROR</td><td>Login failures, API failures</td></tr>
+<tr><td>COPY</td><td>Customer copied a review</td></tr>
+<tr><td>POSTED</td><td>Review posted on Google</td></tr>
+<tr><td>SETTINGS</td><td>Settings changed</td></tr>
+</table>
+<p>Filter by action type. Paginated (25 per page).</p>
+
+<hr>
+
+<h2>Shop Owner Guide</h2>
+
+<h3>Login</h3>
+<ul>
+  <li>Use the email and password admin created for you</li>
+  <li>URL: <code>https://your-app.railway.app/login</code></li>
+</ul>
+
+<h3>Dashboard</h3>
+<p>Shows:</p>
+<ul>
+  <li><strong>Total Reviews Copied</strong> by customers (live counter)</li>
+  <li><strong>Shop Details:</strong> Business name, address, phone, tone, language</li>
+</ul>
+<p>If admin allowed, you can:</p>
+<ul>
+  <li>Change <strong>Review Tone</strong> and <strong>Language</strong></li>
+  <li>Note: Changing these regenerates ALL reviews</li>
+</ul>
+
+<h3>Getting Your QR Code &amp; Link</h3>
+<p>Contact your admin. They have:</p>
+<ul>
+  <li><strong>QR Code image</strong> - print and display at your counter</li>
+  <li><strong>Review Link</strong> - share directly via WhatsApp/SMS</li>
+</ul>
+
+<hr>
+
+<h2>Customer Flow</h2>
+
+<h3>How It Works</h3>
+<ol>
+  <li><strong>Customer visits your shop</strong></li>
+  <li><strong>You show them the QR code</strong> (printed at counter/desk)</li>
+  <li><strong>Customer scans QR</strong> with phone camera - opens review page</li>
+  <li><strong>50 AI-generated reviews appear</strong> in your selected language and tone</li>
+  <li><strong>Customer taps "Copy Review"</strong> - review copied to clipboard</li>
+  <li><strong>Google review page opens automatically</strong> in a new tab</li>
+  <li><strong>Customer pastes the review</strong> on Google and submits</li>
+  <li><strong>Customer taps "I Posted It!"</strong> on the review page to confirm</li>
+</ol>
+
+<h3>Important</h3>
+<ul>
+  <li>Reviews are short (~50 words, 3 lines)</li>
+  <li>Each review includes your business name</li>
+  <li>Reviews never repeat - once copied, removed permanently</li>
+  <li>New reviews auto-generate to maintain the pool</li>
+  <li>Human-like, natural tone - not robotic</li>
+</ul>
+
+<hr>
+
+<h2>Technical Details</h2>
+
+<h3>Architecture</h3>
+<table>
+<tr><td><strong>Backend</strong></td><td>Node.js + Express + MongoDB (Atlas)</td></tr>
+<tr><td><strong>Frontend</strong></td><td>React + Vite + Tailwind CSS</td></tr>
+<tr><td><strong>Hosting</strong></td><td>Railway (free tier)</td></tr>
+<tr><td><strong>Database</strong></td><td>MongoDB Atlas (free M0 cluster)</td></tr>
+<tr><td><strong>AI</strong></td><td>OpenAI GPT-4o-mini</td></tr>
+</table>
+
+<h3>Environment Variables (Railway)</h3>
+<table>
+<tr><th>Variable</th><th>Description</th></tr>
+<tr><td>MONGO_URI</td><td>MongoDB Atlas connection string</td></tr>
+<tr><td>JWT_SECRET</td><td>Secret key for authentication</td></tr>
+<tr><td>NODE_ENV</td><td>Set to "production"</td></tr>
+<tr><td>FRONTEND_URL</td><td>Your Railway app URL</td></tr>
+</table>
+
+<h3>OpenAI API Key</h3>
+<p>Set via Admin Panel -&gt; Settings (not in environment variables). Stored in database.</p>
+
+<h3>Security</h3>
+<ul>
+  <li>JWT authentication with role-based access</li>
+  <li>Passwords hashed with bcrypt (12 rounds)</li>
+  <li>All API requests logged with IP and user agent</li>
+</ul>
+
+<hr>
+
+<h2>FAQ</h2>
+
+<p><strong>Q: Reviews not generating?</strong><br>
+A: Check OpenAI API key in Settings. Also check credits at platform.openai.com/billing.</p>
+
+<p><strong>Q: QR code shows wrong URL?</strong><br>
+A: Contact admin to update FRONTEND_URL in Railway variables, then regenerate QR.</p>
+
+<p><strong>Q: Customer can't copy on iPhone?</strong><br>
+A: Fixed! Fallback copy method works on all devices including HTTP.</p>
+
+<p><strong>Q: How do I add ChatGPT credits?</strong><br>
+A: Go to platform.openai.com -&gt; Settings -&gt; Billing -&gt; Add credits.</p>
+
+<p><strong>Q: Can I change the review tone later?</strong><br>
+A: Yes! Admin can change it per shop. Reviews will regenerate with new tone.</p>
+
+<hr>
+
+<div class="footer">
+  <p>For issues, contact your system administrator.</p>
+</div>
+
+</body>
+</html>
