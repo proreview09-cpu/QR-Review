@@ -154,12 +154,11 @@ exports.getShop = async (req, res) => {
     ]);
 
     // Always regenerate QR with current FRONTEND_URL
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const { qrDataUrl } = await generateQR(shop._id.toString(), frontendUrl);
-    if (shop.qrCodeData !== qrDataUrl) {
-      shop.qrCodeData = qrDataUrl;
-      await shop.save();
-    }
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5175';
+    console.log('getShop - FRONTEND_URL:', frontendUrl);
+    const { qrDataUrl, url: reviewUrl } = await generateQR(shop._id.toString(), frontendUrl);
+    shop.qrCodeData = qrDataUrl;
+    await shop.save();
 
     res.json({
       shop,
