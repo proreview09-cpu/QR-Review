@@ -8,6 +8,7 @@ const navigation = [
   { to: '/admin/shops', label: 'Businesses', icon: 'shop' },
   { to: '/admin/logs', label: 'Activity Logs', icon: 'activity' },
   { to: '/admin/settings', label: 'Settings', icon: 'settings' },
+  { to: '/admin/ai', label: 'AI Providers', icon: 'ai' },
 ];
 
 export default function Layout({ children }) {
@@ -37,8 +38,10 @@ export default function Layout({ children }) {
       : location.pathname.includes('/shops')
         ? 'Businesses'
         : location.pathname.includes('/logs')
-          ? 'Activity logs'
-          : location.pathname.includes('/settings')
+        ? 'Activity logs'
+        : location.pathname.includes('/ai')
+          ? 'AI Providers'
+        : location.pathname.includes('/settings')
             ? 'Settings'
             : 'Dashboard';
 
@@ -65,14 +68,7 @@ export default function Layout({ children }) {
           ))}
         </nav>
 
-        <div className="mt-auto rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-50 p-4">
-          <div className="mb-3 grid h-9 w-9 place-items-center rounded-xl bg-white text-indigo-600 shadow-sm">?</div>
-          <p className="text-sm font-bold text-indigo-950">Need a hand?</p>
-          <p className="mt-1 text-xs leading-relaxed text-indigo-700/70">Review your activity, AI usage, and business setup from one place.</p>
-          <Link to="/admin/logs" className="mt-3 inline-flex text-xs font-bold text-indigo-600 hover:text-indigo-800">View activity <span className="ml-1">-&gt;</span></Link>
-        </div>
-
-        <div className="mt-5 flex items-center gap-3 border-t border-[#edf0f5] px-2 pt-5">
+        <div className="mt-auto flex items-center gap-3 border-t border-[#edf0f5] px-2 pt-5">
           <span className="grid h-9 w-9 place-items-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">{user?.name?.slice(0, 2).toUpperCase()}</span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-bold">{user?.name}</p>
@@ -122,6 +118,7 @@ function NavIcon({ type, active }) {
     shop: <><path d="M3 10h18" /><path d="M5 10v10h14V10" /><path d="M4 10l2-6h12l2 6" /><path d="M9 20v-5h6v5" /></>,
     activity: <><path d="M4 19V5" /><path d="M4 15h5V9h5V5h6" /><path d="M17 5h3v3" /></>,
     settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-2.5v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H6v-2.5h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V5h2.5v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.2v2.5h-.2a1.7 1.7 0 0 0-1.5 1Z" /></>,
+    ai: <><path d="M12 3v3" /><path d="M12 18v3" /><path d="M3 12h3" /><path d="M18 12h3" /><path d="m5.6 5.6 2.1 2.1" /><path d="m16.3 16.3 2.1 2.1" /><path d="m18.4 5.6-2.1 2.1" /><path d="m7.7 16.3-2.1 2.1" /><circle cx="12" cy="12" r="4" /></>,
   };
   return <svg className={`h-[19px] w-[19px] ${active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[type]}</svg>;
 }

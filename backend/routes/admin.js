@@ -11,9 +11,12 @@ const {
   regenerateReviews,
   getLogs,
   getAIStatus,
+  checkAIStatus,
   getSettings,
   updateSettings,
   createOwner,
+  resetOwnerPassword,
+  impersonateOwner,
 } = require('../controllers/adminController');
 
 router.use(auth(['admin']));
@@ -30,6 +33,9 @@ router.get('/settings', getSettings);
 router.put('/settings', updateSettings);
 router.get('/logs', getLogs);
 router.get('/ai-status', getAIStatus);
+router.post('/ai-status/check', checkAIStatus);
 router.post('/owners', createOwner);
+router.post('/shops/:id/reset-owner-password', resetOwnerPassword);
+router.post('/shops/:id/impersonate', impersonateOwner);
 
 module.exports = router;

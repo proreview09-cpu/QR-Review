@@ -79,6 +79,22 @@ function parseReviews(text) {
   return reviews.map((review) => review.trim());
 }
 
+async function getGeminiModels(apiKey) {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || `Gemini model check failed (${response.status})`);
+  return (data.models || [])
+    .filter((item) => item.supportedGenerationMethods?.includes('generateContent'))
+    .map((item) => item.name?.replace('models/', ''))
+    .filter(Boolean);
+}
+
+function selectGeminiModel(models, requestedModel) {
+  if (requestedModel && models.includes(requestedModel)) return requestedModel;
+  const preferred = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  return preferred.find((candidate) => models.includes(candidate)) || models[0];
+}
+
 async function requestProvider(provider, prompt) {
   const providerName = provider.provider;
 
@@ -102,7 +118,9 @@ async function requestProvider(provider, prompt) {
   }
 
   if (providerName === 'gemini') {
-    const model = provider.model || 'gemini-1.5-flash';
+    const supportedModels = await getGeminiModels(provider.apiKey);
+    const model = selectGeminiModel(supportedModels, provider.model);
+    if (!model) throw new Error('Gemini has no model available for generateContent');
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(provider.apiKey)}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -170,24 +188,95 @@ function recordTokenUsage(shopId, provider, model, usage, reviewsGenerated, succ
   }).catch(console.error);
 }
 
-function updateProviderStatus(provider, status, error = '') {
+function quotaStatusFromError(error) {
+  return /(credit|quota|billing|insufficient|rate limit|429)/i.test(error) ? 'exhausted' : 'unknown';
+}
+
+function updateProviderStatus(provider, status, error = '', extra = {}) {
   const now = new Date();
+  const set = {
+    status,
+    lastAttemptAt: now,
+    ...extra,
+  };
+  if (status === 'active') {
+    Object.assign(set, { lastSuccessAt: now, lastError: '', consecutiveFailures: 0, quotaStatus: 'available' });
+  }
+  if (status === 'failed') {
+    Object.assign(set, { lastFailureAt: now, lastError: error.slice(0, 500), quotaStatus: quotaStatusFromError(error) });
+  }
   const update = {
-    $set: {
-      status,
-      lastAttemptAt: now,
-      ...(status === 'active' ? { lastSuccessAt: now, lastError: '' } : {}),
-      ...(status === 'failed' ? { lastFailureAt: now, lastError: error.slice(0, 500) } : {}),
-    },
-    ...(status === 'active'
-      ? { $set: { status, lastAttemptAt: now, lastSuccessAt: now, lastError: '', consecutiveFailures: 0 } }
-      : { $inc: { consecutiveFailures: 1 } }),
+    $set: set,
+    ...(status === 'failed' ? { $inc: { consecutiveFailures: 1 } } : {}),
   };
   return AIProviderStatus.findOneAndUpdate(
     { provider },
     update,
     { upsert: true, new: true, setDefaultsOnInsert: true },
   ).catch((statusError) => console.error('AI status update failed:', statusError.message));
+}
+
+async function checkProviderAccess(provider) {
+  if (provider.provider === 'openai' || provider.provider === 'groq') {
+    const client = new OpenAI({
+      apiKey: provider.apiKey,
+      ...(provider.provider === 'groq' ? { baseURL: 'https://api.groq.com/openai/v1' } : {}),
+    });
+    const result = await client.models.list();
+    const models = (result.data || []).map((model) => model.id).slice(0, 100);
+    return { status: 'active', quotaStatus: 'unknown', models, selectedModel: provider.model || (provider.provider === 'groq' ? 'llama-3.1-8b-instant' : 'gpt-4o-mini') };
+  }
+
+  if (provider.provider === 'gemini') {
+    const models = await getGeminiModels(provider.apiKey);
+    return { status: 'active', quotaStatus: 'unknown', models, selectedModel: selectGeminiModel(models, provider.model) || '' };
+  }
+
+  if (provider.provider === 'anthropic') {
+    return { status: 'unknown', quotaStatus: 'unknown', models: [provider.model || 'claude-3-5-haiku-latest'], selectedModel: provider.model || 'claude-3-5-haiku-latest' };
+  }
+
+  throw new Error(`Unsupported AI provider: ${provider.provider}`);
+}
+
+async function checkAIProviders() {
+  const providers = await getAIProviders();
+  for (const provider of providers) {
+    try {
+      const result = await checkProviderAccess(provider);
+      await AIProviderStatus.findOneAndUpdate(
+        { provider: provider.provider },
+        {
+          $set: {
+            status: result.status,
+            models: result.models || [],
+            selectedModel: result.selectedModel || '',
+            quotaStatus: result.quotaStatus || 'unknown',
+            lastHealthCheckAt: new Date(),
+            lastError: '',
+            ...(result.status === 'active' ? { lastSuccessAt: new Date(), consecutiveFailures: 0 } : {}),
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+    } catch (error) {
+      await AIProviderStatus.findOneAndUpdate(
+        { provider: provider.provider },
+        {
+          $set: {
+            status: 'failed',
+            lastError: error.message.slice(0, 500),
+            quotaStatus: quotaStatusFromError(error.message),
+            lastFailureAt: new Date(),
+            lastHealthCheckAt: new Date(),
+          },
+          $inc: { consecutiveFailures: 1 },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+    }
+  }
+  return providers.length;
 }
 
 function generatePrompt(shopName, businessName, tone, count, language, generalPrompt, customPrompt, promptMode) {
@@ -217,7 +306,7 @@ Return ONLY JSON array: ["review1","review2",...]`;
 async function generateReviews(shopName, businessName, tone, count = 10, language = 'english', shopId = null, customPrompt = '', promptMode = 'general', promptContext = {}) {
   const providers = await getAIProviders();
   if (!providers.length) {
-    return generateMockReviews(count, language);
+    return generateMockReviews(count, language, shopName);
   }
 
   const generalPrompt = await getGeneralPrompt();
@@ -238,21 +327,21 @@ async function generateReviews(shopName, businessName, tone, count = 10, languag
       const result = await requestProvider(provider, prompt);
       const reviews = parseReviews(result.text);
       recordTokenUsage(shopId, provider.provider, result.model, result.usage, count, true);
-      updateProviderStatus(provider.provider, 'active');
+      updateProviderStatus(provider.provider, 'active', '', { selectedModel: result.model });
       console.log(`Review generation succeeded with ${provider.provider}`);
       return reviews;
     } catch (err) {
       recordTokenUsage(shopId, provider.provider, provider.model || provider.provider, null, 0, false);
-      updateProviderStatus(provider.provider, 'failed', err.message);
+      updateProviderStatus(provider.provider, 'failed', err.message, { selectedModel: provider.model || '' });
       console.error(`${provider.provider} failed, trying next provider:`, err.message);
     }
   }
 
   console.error('All configured AI providers failed, using mock reviews');
-  return generateMockReviews(count, language);
+  return generateMockReviews(count, language, shopName);
 }
 
-function generateMockReviews(count, language = 'english') {
+function generateMockReviews(count, language = 'english', shopName = 'this business') {
   const pools = {
     english: [
       "honestly this shop is a lifesaver. staff is super chill and they actually know what they're doing. prices won't break your bank either",
@@ -303,14 +392,28 @@ function generateMockReviews(count, language = 'english') {
   };
 
   const mockReviews = pools[language] || pools.english;
+  const suffixes = {
+    english: ['The whole visit felt easy.', 'The small details made a difference.', 'I left feeling looked after.', 'It was a genuinely smooth experience.', 'This is how good service should feel.'],
+    gujarati: ['ફરી આવવાનું મન છે.', 'નાની નાની બાબતો પણ સરસ રીતે સંભાળે છે.', 'સંપૂર્ણ અનુભવથી ખુશ છું.', 'સેવા ખરેખર સરળ અને સારી રહી.', 'આવી સેવા મળવી સારી વાત છે.'],
+    hindi: ['फिर से आने का मन है।', 'छोटी-छोटी बातों का भी ध्यान रखा गया।', 'पूरे अनुभव से खुश हूं।', 'सेवा सच में आसान और अच्छी रही।', 'ऐसी सेवा मिलना अच्छी बात है।'],
+  };
+  const prefix = language === 'gujarati'
+    ? `${shopName} માં અનુભવ સારો રહ્યો.`
+    : language === 'hindi'
+      ? `${shopName} में अनुभव अच्छा रहा।`
+      : `Had a good experience at ${shopName}.`;
+  const languageSuffixes = suffixes[language] || suffixes.english;
   let result = [];
   let pool = [...mockReviews];
   for (let i = 0; i < count; i++) {
     if (pool.length === 0) pool = [...mockReviews];
     const idx = Math.floor(Math.random() * pool.length);
-    result.push(pool.splice(idx, 1)[0]);
+    const base = pool.splice(idx, 1)[0].replace(/[.!?]+$/, '');
+    const cycle = Math.floor(i / mockReviews.length);
+    const suffix = languageSuffixes[cycle % languageSuffixes.length];
+    result.push(`${prefix} ${base}. ${suffix}`);
   }
   return result;
 }
 
-module.exports = { generateReviews };
+module.exports = { generateReviews, checkAIProviders };

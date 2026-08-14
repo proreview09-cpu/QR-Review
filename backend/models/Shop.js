@@ -28,6 +28,7 @@ const shopSchema = new mongoose.Schema({
   canOwnerSetTone: { type: Boolean, default: false },
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   isActive: { type: Boolean, default: true },
+  expiresAt: { type: Date, default: null },
   totalReviewsCopied: { type: Number, default: 0 },
   totalReviewsPosted: { type: Number, default: 0 },
   reviewPoolMin: { type: Number, default: 50 },

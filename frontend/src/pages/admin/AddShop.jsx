@@ -30,7 +30,7 @@ const emptyForm = {
   businessName: '', shopName: '', address: '', phone: '', googleReviewUrl: '',
   reviewTone: 'friendly', language: 'english',
   customPrompt: '', promptMode: 'combine',
-  canOwnerSetTone: false, reviewPoolMin: 50, reviewBatchSize: 50,
+  canOwnerSetTone: false, validityDays: 30, reviewPoolMin: 50, reviewBatchSize: 50,
 };
 
 export default function AddShop() {
@@ -172,6 +172,9 @@ export default function AddShop() {
             </Field>
             <Field label="Generate Batch Size" hint="Number of reviews generated whenever the queue needs refilling.">
               <input type="number" name="reviewBatchSize" value={form.reviewBatchSize} onChange={handleChange} min="10" max="200" className="input" />
+            </Field>
+            <Field label="Account Validity (days)" hint="Owner login, QR, and review link stop after this period. Use 0 for unlimited.">
+              <input type="number" name="validityDays" value={form.validityDays} onChange={handleChange} min="0" max="3650" className="input" />
             </Field>
           </div>
         </div>

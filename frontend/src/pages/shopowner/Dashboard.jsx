@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [saving, setSaving] = useState(false);
   const [editTone, setEditTone] = useState('');
   const [editLanguage, setEditLanguage] = useState('');
+  const [isAdminPreview, setIsAdminPreview] = useState(false);
 
   useEffect(() => {
     api.get('/shop/my-shop').then(({ data: result }) => {
@@ -35,6 +36,20 @@ export default function Dashboard() {
       setEditLanguage(result.shop.language || 'english');
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    setIsAdminPreview(Boolean(sessionStorage.getItem('qr-admin-session')));
+  }, []);
+
+  const exitAdminPreview = () => {
+    const originalSession = sessionStorage.getItem('qr-admin-session');
+    if (!originalSession) return;
+    const session = JSON.parse(originalSession);
+    localStorage.setItem('token', session.token);
+    localStorage.setItem('user', session.user);
+    sessionStorage.removeItem('qr-admin-session');
+    window.location.href = '/admin/shops';
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -65,9 +80,10 @@ export default function Dashboard() {
           <span><strong className="block text-[17px] font-extrabold tracking-tight">QR <span className="text-indigo-600">Review</span></strong><small className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Business growth</small></span>
         </div>
         <div className="flex items-center gap-3">
+          {isAdminPreview && <span className="hidden rounded-full bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-700 sm:inline-flex">Admin preview</span>}
           <span className="hidden text-right sm:block"><strong className="block text-sm font-bold">{user?.name}</strong><small className="text-xs text-slate-400">Business owner</small></span>
           <span className="grid h-10 w-10 place-items-center rounded-full bg-indigo-100 text-xs font-extrabold text-indigo-700">{user?.name?.slice(0, 2).toUpperCase()}</span>
-          <button onClick={() => { logout(); navigate('/login'); }} className="ml-1 rounded-xl border border-[#e7eaf2] px-3 py-2 text-xs font-bold text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600">Logout</button>
+          <button onClick={isAdminPreview ? exitAdminPreview : () => { logout(); navigate('/login'); }} className="ml-1 rounded-xl border border-[#e7eaf2] px-3 py-2 text-xs font-bold text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600">{isAdminPreview ? 'Exit preview' : 'Logout'}</button>
         </div>
       </header>
 

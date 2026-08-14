@@ -8,6 +8,10 @@ const aiProviderStatusSchema = new mongoose.Schema({
   lastSuccessAt: { type: Date },
   lastFailureAt: { type: Date },
   consecutiveFailures: { type: Number, default: 0 },
+  models: { type: [String], default: [] },
+  selectedModel: { type: String, default: '' },
+  quotaStatus: { type: String, enum: ['unknown', 'available', 'exhausted'], default: 'unknown' },
+  lastHealthCheckAt: { type: Date },
 }, { timestamps: true });
 
 module.exports = mongoose.model('AIProviderStatus', aiProviderStatusSchema);

@@ -7,6 +7,7 @@ import AdminShops from './pages/admin/Shops';
 import AdminAddShop from './pages/admin/AddShop';
 import AdminShopDetail from './pages/admin/ShopDetail';
 import AdminSettings from './pages/admin/Settings';
+import AdminAIProviders from './pages/admin/AIProviders';
 import AdminLogs from './pages/admin/Logs';
 import ShopOwnerDashboard from './pages/shopowner/Dashboard';
 import ReviewPage from './pages/customer/ReviewPage';
@@ -38,6 +39,7 @@ export default function App() {
       <Route path="/admin/shops/add" element={<Layout><ProtectedRoute role="admin"><AdminAddShop /></ProtectedRoute></Layout>} />
       <Route path="/admin/shops/:id" element={<Layout><ProtectedRoute role="admin"><AdminShopDetail /></ProtectedRoute></Layout>} />
       <Route path="/admin/settings" element={<Layout><ProtectedRoute role="admin"><AdminSettings /></ProtectedRoute></Layout>} />
+      <Route path="/admin/ai" element={<Layout><ProtectedRoute role="admin"><AdminAIProviders /></ProtectedRoute></Layout>} />
       <Route path="/admin/logs" element={<Layout><ProtectedRoute role="admin"><AdminLogs /></ProtectedRoute></Layout>} />
 
       <Route path="/dashboard" element={<ProtectedRoute role="shop_owner"><ShopOwnerDashboard /></ProtectedRoute>} />

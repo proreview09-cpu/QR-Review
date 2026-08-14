@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import PromptVariables from '../../components/PromptVariables';
@@ -25,8 +25,18 @@ const PROMPT_MODES = [
   { value: 'override', label: 'Override general with shop prompt' },
 ];
 
+function toLocalDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  const pad = (number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function ShopDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const readOnly = searchParams.get('mode') === 'view';
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -35,6 +45,10 @@ export default function ShopDetail() {
   const [reviewHistory, setReviewHistory] = useState([]);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewTotal, setReviewTotal] = useState(0);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetResult, setResetResult] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   const fetchShop = () => {
     api.get(`/admin/shops/${id}`)
@@ -48,6 +62,7 @@ export default function ShopDetail() {
           customPrompt: data.shop.customPrompt || '', promptMode: data.shop.promptMode || 'general',
           isActive: data.shop.isActive, canOwnerSetTone: data.shop.canOwnerSetTone || false,
           reviewPoolMin: data.shop.reviewPoolMin || 50, reviewBatchSize: data.shop.reviewBatchSize || 50,
+          expiresAt: toLocalDateTime(data.shop.expiresAt),
         });
         setChanged(false);
         fetchReviewHistory();
@@ -83,7 +98,8 @@ export default function ShopDetail() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.put(`/admin/shops/${id}`, editForm);
+      const payload = { ...editForm, expiresAt: editForm.expiresAt ? new Date(editForm.expiresAt).toISOString() : null };
+      await api.put(`/admin/shops/${id}`, payload);
       toast.success('Shop updated');
       fetchShop();
     } catch {
@@ -103,6 +119,20 @@ export default function ShopDetail() {
     }
   };
 
+  const handleResetPassword = async () => {
+    setResetting(true);
+    try {
+      const { data: result } = await api.post(`/admin/shops/${id}/reset-owner-password`, { password: resetPassword });
+      setResetResult(result.temporaryPassword);
+      setResetPassword('');
+      toast.success('Owner password reset');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to reset password');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" /></div>;
   if (!data) return <p>Shop not found.</p>;
 
@@ -114,6 +144,8 @@ export default function ShopDetail() {
       <div className="flex items-center gap-4 mb-6">
         <Link to="/admin/shops" className="text-gray-400 hover:text-gray-600">&larr; Back</Link>
         <h2 className="text-2xl font-bold">{shop.shopName}</h2>
+        {readOnly && <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">View only</span>}
+        {readOnly && <button onClick={() => navigate(`/admin/shops/${id}?mode=edit`)} className="ml-auto rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700">Edit entry</button>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -148,6 +180,7 @@ export default function ShopDetail() {
 
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <h3 className="text-lg font-semibold mb-4">Business Details</h3>
+        <fieldset disabled={readOnly} className="contents">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
@@ -180,10 +213,12 @@ export default function ShopDetail() {
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
         </div>
+        </fieldset>
       </div>
 
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <h3 className="text-lg font-semibold mb-4">Review Settings</h3>
+        <fieldset disabled={readOnly} className="contents">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Review Tone</label>
@@ -246,17 +281,24 @@ export default function ShopDetail() {
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
             <p className="text-xs text-gray-400 mt-1">Reviews generated per refill.</p>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Valid Until</label>
+            <input type="datetime-local" name="expiresAt" value={editForm.expiresAt ?? ''} onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+            <p className="text-xs text-gray-400 mt-1">After this time, login, QR, and review link deactivate. Clear for unlimited.</p>
+          </div>
         </div>
+        </fieldset>
         <div className="mt-4 flex gap-3">
-          <button onClick={handleSave} disabled={saving}
+          {!readOnly && <button onClick={handleSave} disabled={saving}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
             {saving ? 'Saving...' : 'Save Changes'}
-          </button>
-          <button onClick={handleRegenerate}
+          </button>}
+          {!readOnly && <button onClick={handleRegenerate}
             className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
             Regenerate Reviews
-          </button>
-          {changed && (
+          </button>}
+          {!readOnly && changed && (
             <span className="text-sm text-amber-600 self-center">Unsaved changes</span>
           )}
         </div>
@@ -292,6 +334,23 @@ export default function ShopDetail() {
         <p><span className="text-gray-500">Name:</span> {shop.owner?.name}</p>
         <p><span className="text-gray-500">Email:</span> {shop.owner?.email}</p>
         <p className="text-sm text-gray-400 mt-2">Created: {new Date(shop.createdAt).toLocaleDateString()}</p>
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <p className="text-sm font-bold text-slate-700">Password access</p>
+          <p className="mt-1 text-xs text-slate-400">Old passwords cannot be viewed because they are securely hashed. You can set a new password or generate a temporary one.</p>
+          <button onClick={() => { setResetOpen(!resetOpen); setResetResult(''); }} className="mt-3 rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50">
+            Reset owner password
+          </button>
+          {resetOpen && (
+            <div className="mt-3 rounded-xl bg-slate-50 p-4">
+              <label className="block text-xs font-bold text-slate-600">New password (optional)</label>
+              <input type="text" value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} placeholder="Leave blank to generate one" className="input mt-2 bg-white" />
+              <button onClick={handleResetPassword} disabled={resetting} className="mt-3 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50">
+                {resetting ? 'Resetting...' : 'Confirm reset'}
+              </button>
+              {resetResult && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3"><p className="text-xs font-bold text-emerald-700">New password (copy it now)</p><div className="mt-1 flex items-center gap-2"><code className="flex-1 break-all text-sm font-bold text-emerald-900">{resetResult}</code><button onClick={() => { navigator.clipboard.writeText(resetResult); toast.success('Password copied'); }} className="rounded bg-white px-2 py-1 text-xs font-bold text-emerald-700">Copy</button></div></div>}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow p-6">

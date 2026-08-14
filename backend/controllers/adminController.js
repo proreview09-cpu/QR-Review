@@ -1,4 +1,6 @@
 const User = require('../models/User');
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const Shop = require('../models/Shop');
 const Review = require('../models/Review');
 const Setting = require('../models/Setting');
@@ -6,7 +8,7 @@ const TokenUsage = require('../models/TokenUsage');
 const ActivityLog = require('../models/ActivityLog');
 const AIProviderStatus = require('../models/AIProviderStatus');
 const { generateQR } = require('../services/qrService');
-const { generateReviews } = require('../services/openaiService');
+const { generateReviews, checkAIProviders } = require('../services/openaiService');
 const { log } = require('../services/logService');
 
 const AI_PROVIDER_LABELS = {
@@ -15,6 +17,12 @@ const AI_PROVIDER_LABELS = {
   anthropic: 'Anthropic Claude',
   groq: 'Groq',
 };
+
+function expiryFromDays(value) {
+  const days = Number(value);
+  if (!Number.isFinite(days) || days <= 0) return null;
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+}
 
 async function getAIProviderSnapshot() {
   const [providerSetting, oldOpenAI, statuses, usage] = await Promise.all([
@@ -53,6 +61,10 @@ async function getAIProviderSnapshot() {
     lastAttemptAt: statusByProvider.get(provider)?.lastAttemptAt || null,
     lastSuccessAt: statusByProvider.get(provider)?.lastSuccessAt || null,
     consecutiveFailures: statusByProvider.get(provider)?.consecutiveFailures || 0,
+    quotaStatus: statusByProvider.get(provider)?.quotaStatus || 'unknown',
+    models: statusByProvider.get(provider)?.models || [],
+    selectedModel: statusByProvider.get(provider)?.selectedModel || '',
+    lastHealthCheckAt: statusByProvider.get(provider)?.lastHealthCheckAt || null,
     totalTokens: usageByProvider.get(provider)?.totalTokens || 0,
     apiCalls: usageByProvider.get(provider)?.apiCalls || 0,
     successfulCalls: usageByProvider.get(provider)?.successfulCalls || 0,
@@ -117,6 +129,15 @@ exports.getAIStatus = async (req, res) => {
   }
 };
 
+exports.checkAIStatus = async (req, res) => {
+  try {
+    await checkAIProviders();
+    res.json(await getAIProviderSnapshot());
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.getShops = async (req, res) => {
   try {
     const shops = await Shop.find().populate('owner', 'name email').sort({ createdAt: -1 });
@@ -128,7 +149,7 @@ exports.getShops = async (req, res) => {
 
 exports.createShop = async (req, res) => {
   try {
-    const { ownerEmail, ownerName, ownerPassword, shopName, businessName, googleReviewUrl, reviewTone, address, phone, language, customPrompt, promptMode, canOwnerSetTone, reviewPoolMin, reviewBatchSize } = req.body;
+    const { ownerEmail, ownerName, ownerPassword, shopName, businessName, googleReviewUrl, reviewTone, address, phone, language, customPrompt, promptMode, canOwnerSetTone, reviewPoolMin, reviewBatchSize, validityDays } = req.body;
 
     let owner = await User.findOne({ email: ownerEmail?.toLowerCase() });
     if (!owner) {
@@ -152,6 +173,7 @@ exports.createShop = async (req, res) => {
       customPrompt: customPrompt || '',
       promptMode: promptMode || 'general',
       canOwnerSetTone: canOwnerSetTone || false,
+      expiresAt: expiryFromDays(validityDays === undefined ? 30 : validityDays),
       reviewPoolMin: reviewPoolMin || 50,
       reviewBatchSize: reviewBatchSize || 50,
       owner: owner._id,
@@ -188,8 +210,16 @@ exports.createShop = async (req, res) => {
 
 exports.updateShop = async (req, res) => {
   try {
-    const shop = await Shop.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('owner', 'name email');
+    const updates = { ...req.body };
+    if (Object.prototype.hasOwnProperty.call(updates, 'expiresAt')) {
+      updates.expiresAt = updates.expiresAt ? new Date(updates.expiresAt) : null;
+    }
+    const shop = await Shop.findByIdAndUpdate(req.params.id, updates, { new: true }).populate('owner', 'name email');
     if (!shop) return res.status(404).json({ message: 'Shop not found' });
+
+    if (req.body.isActive !== undefined) {
+      await User.findByIdAndUpdate(shop.owner?._id || shop.owner, { isActive: req.body.isActive });
+    }
 
     if (req.body.shopName || req.body.businessName || req.body.reviewTone || req.body.language || req.body.customPrompt !== undefined || req.body.promptMode) {
       await Review.deleteMany({ shop: shop._id, isUsed: false });
@@ -251,6 +281,54 @@ exports.deleteShop = async (req, res) => {
     await Review.deleteMany({ shop: shop._id });
     log('DELETE', 'shop', `Deleted shop "${shop.shopName}"`, { performedBy: req.user.email, performedByRole: 'admin', shop: shop._id });
     res.json({ message: 'Shop deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.resetOwnerPassword = async (req, res) => {
+  try {
+    const shop = await Shop.findById(req.params.id).populate('owner', 'name email');
+    if (!shop?.owner) return res.status(404).json({ message: 'Shop owner not found' });
+
+    const requestedPassword = String(req.body.password || '').trim();
+    if (requestedPassword && requestedPassword.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
+
+    const temporaryPassword = requestedPassword || `QR-${crypto.randomBytes(5).toString('hex')}`;
+    const owner = await User.findById(shop.owner._id);
+    owner.password = temporaryPassword;
+    await owner.save();
+
+    log('UPDATE', 'owner-password', `Reset password for ${shop.owner.email}`, {
+      performedBy: req.user.email,
+      performedByRole: 'admin',
+      shop: shop._id,
+    });
+    res.json({ message: 'Password reset successfully', temporaryPassword, owner: { name: owner.name, email: owner.email } });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.impersonateOwner = async (req, res) => {
+  try {
+    const shop = await Shop.findById(req.params.id).populate('owner', 'name email role isActive');
+    if (!shop?.owner) return res.status(404).json({ message: 'Shop owner not found' });
+    if (!shop.owner.isActive) return res.status(400).json({ message: 'Shop owner account is inactive' });
+
+    const token = jwt.sign(
+      { id: shop.owner._id, role: 'shop_owner', impersonatedBy: req.user._id.toString() },
+      process.env.JWT_SECRET,
+      { expiresIn: '2h' },
+    );
+    log('LOGIN', 'impersonation', `Admin opened ${shop.owner.email} dashboard`, {
+      performedBy: req.user.email,
+      performedByRole: 'admin',
+      shop: shop._id,
+    });
+    res.json({ token, user: shop.owner, shopId: shop._id });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
