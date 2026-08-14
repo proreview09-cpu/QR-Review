@@ -19,6 +19,12 @@ const shopSchema = new mongoose.Schema({
     enum: ['english', 'gujarati', 'hindi'],
     default: 'english',
   },
+  customPrompt: { type: String, trim: true, default: '' },
+  promptMode: {
+    type: String,
+    enum: ['general', 'override', 'combine'],
+    default: 'general',
+  },
   canOwnerSetTone: { type: Boolean, default: false },
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   isActive: { type: Boolean, default: true },

@@ -1,6 +1,7 @@
 const OpenAI = require('openai');
 const Setting = require('../models/Setting');
 const TokenUsage = require('../models/TokenUsage');
+const AIProviderStatus = require('../models/AIProviderStatus');
 
 const REVIEW_TONES = {
   professional: 'formal and business-like',
@@ -17,15 +18,186 @@ const LANGUAGES = {
   hindi: 'Hindi (हिन्दी)',
 };
 
-async function getApiKey() {
-  const setting = await Setting.findOne({ key: 'openaiApiKey' });
-  return setting?.value || process.env.OPENAI_API_KEY;
+const PROMPT_VARIABLES = [
+  'shopName',
+  'businessName',
+  'ownerName',
+  'address',
+  'phone',
+  'reviewTone',
+  'language',
+  'reviewCount',
+];
+
+async function getAIProviders() {
+  const providersSetting = await Setting.findOne({ key: 'aiProviders' });
+  const configuredProviders = Array.isArray(providersSetting?.value)
+    ? providersSetting.value.filter((provider) => provider.enabled !== false && provider.apiKey)
+    : [];
+
+  if (configuredProviders.length) return configuredProviders;
+
+  const openaiSetting = await Setting.findOne({ key: 'openaiApiKey' });
+  const openaiApiKey = openaiSetting?.value || process.env.OPENAI_API_KEY;
+  return openaiApiKey && openaiApiKey !== 'your_openai_api_key_here'
+    ? [{ provider: 'openai', apiKey: openaiApiKey, enabled: true }]
+    : [];
 }
 
-function generatePrompt(shopName, businessName, tone, count, language) {
+async function getGeneralPrompt() {
+  const setting = await Setting.findOne({ key: 'generalReviewPrompt' });
+  return setting?.value || '';
+}
+
+function resolvePrompt(generalPrompt, customPrompt, promptMode) {
+  if (promptMode === 'override') return customPrompt || generalPrompt;
+  if (promptMode === 'combine') {
+    return [generalPrompt, customPrompt].filter(Boolean).join('\n');
+  }
+  return generalPrompt;
+}
+
+function replacePromptVariables(prompt, values) {
+  if (!prompt) return '';
+  return prompt.replace(/\{([a-zA-Z][a-zA-Z0-9]*)\}/g, (match, key) => {
+    if (!PROMPT_VARIABLES.includes(key)) return match;
+    return String(values[key] ?? '');
+  });
+}
+
+function parseReviews(text) {
+  if (!text) throw new Error('Provider returned an empty response');
+  const cleaned = text.replace(/```(?:json)?/gi, '').trim();
+  const start = cleaned.indexOf('[');
+  const end = cleaned.lastIndexOf(']');
+  if (start < 0 || end < start) throw new Error('Provider did not return a JSON array');
+
+  const reviews = JSON.parse(cleaned.slice(start, end + 1));
+  if (!Array.isArray(reviews) || reviews.some((review) => typeof review !== 'string' || !review.trim())) {
+    throw new Error('Provider returned an invalid review array');
+  }
+  return reviews.map((review) => review.trim());
+}
+
+async function requestProvider(provider, prompt) {
+  const providerName = provider.provider;
+
+  if (providerName === 'openai' || providerName === 'groq') {
+    const client = new OpenAI({
+      apiKey: provider.apiKey,
+      ...(providerName === 'groq' ? { baseURL: 'https://api.groq.com/openai/v1' } : {}),
+    });
+    const model = provider.model || (providerName === 'groq' ? 'llama-3.1-8b-instant' : 'gpt-4o-mini');
+    const response = await client.chat.completions.create({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 1.2,
+      max_tokens: 3000,
+    });
+    return {
+      text: response.choices?.[0]?.message?.content,
+      usage: response.usage,
+      model: response.model || model,
+    };
+  }
+
+  if (providerName === 'gemini') {
+    const model = provider.model || 'gemini-1.5-flash';
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(provider.apiKey)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 1.2, maxOutputTokens: 3000 },
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || `Gemini request failed (${response.status})`);
+    return {
+      text: data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join(''),
+      usage: {
+        prompt_tokens: data.usageMetadata?.promptTokenCount || 0,
+        completion_tokens: data.usageMetadata?.candidatesTokenCount || 0,
+        total_tokens: data.usageMetadata?.totalTokenCount || 0,
+      },
+      model,
+    };
+  }
+
+  if (providerName === 'anthropic') {
+    const model = provider.model || 'claude-3-5-haiku-latest';
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': provider.apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 3000,
+        temperature: 1.2,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || `Anthropic request failed (${response.status})`);
+    return {
+      text: data.content?.map((part) => part.text || '').join(''),
+      usage: {
+        prompt_tokens: data.usage?.input_tokens || 0,
+        completion_tokens: data.usage?.output_tokens || 0,
+        total_tokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0),
+      },
+      model,
+    };
+  }
+
+  throw new Error(`Unsupported AI provider: ${providerName}`);
+}
+
+function recordTokenUsage(shopId, provider, model, usage, reviewsGenerated, success) {
+  if (!shopId) return;
+  TokenUsage.create({
+    shop: shopId,
+    provider,
+    model,
+    promptTokens: usage?.prompt_tokens || 0,
+    completionTokens: usage?.completion_tokens || 0,
+    totalTokens: usage?.total_tokens || 0,
+    reviewsGenerated: success ? reviewsGenerated : 0,
+    success,
+  }).catch(console.error);
+}
+
+function updateProviderStatus(provider, status, error = '') {
+  const now = new Date();
+  const update = {
+    $set: {
+      status,
+      lastAttemptAt: now,
+      ...(status === 'active' ? { lastSuccessAt: now, lastError: '' } : {}),
+      ...(status === 'failed' ? { lastFailureAt: now, lastError: error.slice(0, 500) } : {}),
+    },
+    ...(status === 'active'
+      ? { $set: { status, lastAttemptAt: now, lastSuccessAt: now, lastError: '', consecutiveFailures: 0 } }
+      : { $inc: { consecutiveFailures: 1 } }),
+  };
+  return AIProviderStatus.findOneAndUpdate(
+    { provider },
+    update,
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  ).catch((statusError) => console.error('AI status update failed:', statusError.message));
+}
+
+function generatePrompt(shopName, businessName, tone, count, language, generalPrompt, customPrompt, promptMode) {
   const toneDesc = REVIEW_TONES[tone] || 'friendly';
   const langName = LANGUAGES[language] || 'English';
+  const specificInstructions = resolvePrompt(generalPrompt, customPrompt, promptMode);
   return `You are a real customer who just visited "${shopName}". Write ${count} short Google reviews in ${langName}.
+
+BUSINESS-SPECIFIC INSTRUCTIONS:
+${specificInstructions || 'Use only the business details and tone provided below.'}
 
 CRITICAL RULES:
 - Write like a REAL person - use casual language, typos ok, short sentences
@@ -37,47 +209,47 @@ CRITICAL RULES:
 - No hashtags, no emojis, no greetings like "Dear", no sign-offs
 - No generic phrases like "highly recommend" in every review
 - Mix up opening words (don't start all with "Great" or "Amazing")
+- Do not invent specific facts, offers, products, or experiences that are not supported by the instructions
 
 Return ONLY JSON array: ["review1","review2",...]`;
 }
 
-async function generateReviews(shopName, businessName, tone, count = 10, language = 'english', shopId = null) {
-  const apiKey = await getApiKey();
-  if (!apiKey || apiKey === 'your_openai_api_key_here') {
+async function generateReviews(shopName, businessName, tone, count = 10, language = 'english', shopId = null, customPrompt = '', promptMode = 'general', promptContext = {}) {
+  const providers = await getAIProviders();
+  if (!providers.length) {
     return generateMockReviews(count, language);
   }
 
-  try {
-    const openai = new OpenAI({ apiKey });
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: generatePrompt(shopName, businessName, tone, count, language) }],
-      temperature: 1.2,
-      max_tokens: 3000,
-    });
+  const generalPrompt = await getGeneralPrompt();
+  const variables = {
+    shopName,
+    businessName,
+    reviewTone: tone,
+    language,
+    reviewCount: count,
+    ...promptContext,
+  };
+  const resolvedGeneralPrompt = replacePromptVariables(generalPrompt, variables);
+  const resolvedCustomPrompt = replacePromptVariables(customPrompt, variables);
+  const prompt = generatePrompt(shopName, businessName, tone, count, language, resolvedGeneralPrompt, resolvedCustomPrompt, promptMode);
 
-    if (shopId && response.usage) {
-      TokenUsage.create({
-        shop: shopId,
-        model: 'gpt-4o-mini',
-        promptTokens: response.usage.prompt_tokens || 0,
-        completionTokens: response.usage.completion_tokens || 0,
-        totalTokens: response.usage.total_tokens || 0,
-        reviewsGenerated: count,
-        success: true,
-      }).catch(console.error);
+  for (const provider of providers) {
+    try {
+      const result = await requestProvider(provider, prompt);
+      const reviews = parseReviews(result.text);
+      recordTokenUsage(shopId, provider.provider, result.model, result.usage, count, true);
+      updateProviderStatus(provider.provider, 'active');
+      console.log(`Review generation succeeded with ${provider.provider}`);
+      return reviews;
+    } catch (err) {
+      recordTokenUsage(shopId, provider.provider, provider.model || provider.provider, null, 0, false);
+      updateProviderStatus(provider.provider, 'failed', err.message);
+      console.error(`${provider.provider} failed, trying next provider:`, err.message);
     }
-
-    const text = response.choices[0].message.content.trim();
-    const cleaned = text.replace(/```json|```/g, '').trim();
-    const reviews = JSON.parse(cleaned);
-
-    if (!Array.isArray(reviews)) throw new Error('Invalid response format');
-    return reviews;
-  } catch (err) {
-    console.error('OpenAI API failed, using mock reviews:', err.message);
-    return generateMockReviews(count, language);
   }
+
+  console.error('All configured AI providers failed, using mock reviews');
+  return generateMockReviews(count, language);
 }
 
 function generateMockReviews(count, language = 'english') {

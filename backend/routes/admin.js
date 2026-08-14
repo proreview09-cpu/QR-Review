@@ -8,7 +8,9 @@ const {
   deleteShop,
   getShop,
   getShopReviews,
+  regenerateReviews,
   getLogs,
+  getAIStatus,
   getSettings,
   updateSettings,
   createOwner,
@@ -21,11 +23,13 @@ router.get('/shops', getShops);
 router.post('/shops', createShop);
 router.get('/shops/:id', getShop);
 router.get('/shops/:id/reviews', getShopReviews);
+router.post('/shops/:id/regenerate', regenerateReviews);
 router.put('/shops/:id', updateShop);
 router.delete('/shops/:id', deleteShop);
 router.get('/settings', getSettings);
 router.put('/settings', updateSettings);
 router.get('/logs', getLogs);
+router.get('/ai-status', getAIStatus);
 router.post('/owners', createOwner);
 
 module.exports = router;

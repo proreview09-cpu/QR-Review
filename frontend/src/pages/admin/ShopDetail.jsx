@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
+import PromptVariables from '../../components/PromptVariables';
 
 const TONES = [
   { value: 'professional', label: 'Professional' },
@@ -16,6 +17,12 @@ const LANGUAGES = [
   { value: 'english', label: 'English' },
   { value: 'gujarati', label: 'Gujarati' },
   { value: 'hindi', label: 'Hindi' },
+];
+
+const PROMPT_MODES = [
+  { value: 'general', label: 'Use general prompt only' },
+  { value: 'combine', label: 'Combine general + shop prompt' },
+  { value: 'override', label: 'Override general with shop prompt' },
 ];
 
 export default function ShopDetail() {
@@ -38,6 +45,7 @@ export default function ShopDetail() {
           ownerName: data.shop.ownerName || '', address: data.shop.address || '',
           phone: data.shop.phone || '', googleReviewUrl: data.shop.googleReviewUrl,
           reviewTone: data.shop.reviewTone, language: data.shop.language || 'english',
+          customPrompt: data.shop.customPrompt || '', promptMode: data.shop.promptMode || 'general',
           isActive: data.shop.isActive, canOwnerSetTone: data.shop.canOwnerSetTone || false,
           reviewPoolMin: data.shop.reviewPoolMin || 50, reviewBatchSize: data.shop.reviewBatchSize || 50,
         });
@@ -64,6 +72,14 @@ export default function ShopDetail() {
     setChanged(true);
   };
 
+  const insertPromptVariable = (variable) => {
+    setEditForm((current) => ({
+      ...current,
+      customPrompt: `${current.customPrompt || ''}${current.customPrompt && !/\s$/.test(current.customPrompt) ? ' ' : ''}${variable}`,
+    }));
+    setChanged(true);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -79,11 +95,11 @@ export default function ShopDetail() {
 
   const handleRegenerate = async () => {
     try {
-      await api.post(`/api/public/shop/${id}/generate`);
-      toast.success('Regenerating reviews...');
-      setTimeout(fetchShop, 2000);
-    } catch {
-      toast.error('Failed to regenerate');
+      const { data: result } = await api.post(`/admin/shops/${id}/regenerate`);
+      toast.success(result.message || 'Reviews regenerated');
+      fetchShop();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to regenerate');
     }
   };
 
@@ -197,20 +213,39 @@ export default function ShopDetail() {
             <div>
               <label className="text-sm font-medium text-gray-700">Allow owner to change tone/language</label>
               <p className="text-xs text-gray-400">Owner can modify review settings if enabled</p>
+            </div>
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Shop-Specific Prompt</label>
+            <textarea name="customPrompt" value={editForm.customPrompt || ''} onChange={handleChange} rows="4"
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-y"
+              placeholder="Example: Mention quick service, fresh products, and helpful staff." />
+            <p className="text-xs text-gray-400 mt-1">Optional instructions specific to this shop.</p>
+            <PromptVariables onInsert={insertPromptVariable} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Prompt Behavior</label>
+            <select name="promptMode" value={editForm.promptMode || 'general'} onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+              {PROMPT_MODES.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Choose how the shop prompt uses the general prompt.</p>
+            {editForm.customPrompt && editForm.promptMode === 'general' && (
+              <p className="text-xs text-amber-600 mt-1">Shop prompt is currently ignored. Select Combine or Override to use it.</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Pool Size (Queue)</label>
-            <input type="number" name="reviewPoolMin" value={editForm.reviewPoolMin || 50} onChange={handleChange} min="10"
+            <input type="number" name="reviewPoolMin" value={editForm.reviewPoolMin ?? ''} onChange={handleChange} min="10"
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-            <p className="text-xs text-gray-400 mt-1">Min reviews always in queue</p>
+            <p className="text-xs text-gray-400 mt-1">Minimum reviews always in queue.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Generate Batch</label>
-            <input type="number" name="reviewBatchSize" value={editForm.reviewBatchSize || 50} onChange={handleChange} min="10"
+            <input type="number" name="reviewBatchSize" value={editForm.reviewBatchSize ?? ''} onChange={handleChange} min="10"
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-            <p className="text-xs text-gray-400 mt-1">Reviews per generation batch</p>
+            <p className="text-xs text-gray-400 mt-1">Reviews generated per refill.</p>
           </div>
-        </div>
         </div>
         <div className="mt-4 flex gap-3">
           <button onClick={handleSave} disabled={saving}

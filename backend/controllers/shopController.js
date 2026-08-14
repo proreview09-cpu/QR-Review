@@ -46,7 +46,11 @@ exports.updateMyShop = async (req, res) => {
     if (needsRegen) {
       await Review.deleteMany({ shop: shop._id });
       try {
-        const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, 50, shop.language, shop._id);
+        const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 50, shop.language, shop._id, shop.customPrompt, shop.promptMode, {
+          ownerName: shop.ownerName,
+          address: shop.address,
+          phone: shop.phone,
+        });
         await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
       } catch (genErr) {
         console.error('Review regeneration failed:', genErr.message);

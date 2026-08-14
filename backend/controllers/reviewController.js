@@ -53,7 +53,11 @@ exports.copyReview = async (req, res) => {
     log('COPY', 'review', `Review copied for "${shop.shopName}"`, { shop: shop._id, ip: req.ip });
 
     if (unusedCount < shop.reviewPoolMin) {
-      generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 10, shop.language, shop._id)
+      generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 10, shop.language, shop._id, shop.customPrompt, shop.promptMode, {
+        ownerName: shop.ownerName,
+        address: shop.address,
+        phone: shop.phone,
+      })
         .then(async (reviews) => {
           await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
         })
@@ -78,7 +82,11 @@ exports.generateMore = async (req, res) => {
     const needed = Math.max(0, shop.reviewPoolMin - unusedCount);
 
     if (needed > 0) {
-      const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, needed, shop.language, shop._id);
+      const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, needed, shop.language, shop._id, shop.customPrompt, shop.promptMode, {
+        ownerName: shop.ownerName,
+        address: shop.address,
+        phone: shop.phone,
+      });
       await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
       return res.json({ message: `Generated ${needed} new reviews`, generated: needed });
     }
