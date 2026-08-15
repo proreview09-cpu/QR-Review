@@ -6,6 +6,7 @@ import api from '../services/api';
 const navigation = [
   { to: '/admin', label: 'Dashboard', icon: 'dashboard' },
   { to: '/admin/shops', label: 'Businesses', icon: 'shop' },
+  { to: '/admin/categories', label: 'Categories', icon: 'shop' },
   { to: '/admin/logs', label: 'Activity Logs', icon: 'activity' },
   { to: '/admin/settings', label: 'Settings', icon: 'settings' },
   { to: '/admin/ai', label: 'AI Providers', icon: 'ai' },
