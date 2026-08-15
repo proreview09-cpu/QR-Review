@@ -14,6 +14,7 @@ const {
   checkAIStatus,
   getSettings,
   updateSettings,
+  generatePrompt,
   createOwner,
   resetOwnerPassword,
   impersonateOwner,
@@ -31,6 +32,7 @@ router.put('/shops/:id', updateShop);
 router.delete('/shops/:id', deleteShop);
 router.get('/settings', getSettings);
 router.put('/settings', updateSettings);
+router.post('/prompts/generate', generatePrompt);
 router.get('/logs', getLogs);
 router.get('/ai-status', getAIStatus);
 router.post('/ai-status/check', checkAIStatus);

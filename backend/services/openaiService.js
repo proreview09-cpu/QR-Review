@@ -341,6 +341,30 @@ async function generateReviews(shopName, businessName, tone, count = 10, languag
   return generateMockReviews(count, language, shopName);
 }
 
+async function generatePromptSuggestion({ scope = 'general', shopName = '', businessName = '', ownerName = '', address = '', phone = '', category = '', tone = 'friendly', language = 'english' }) {
+  const fallback = `Write short, natural, factual ${LANGUAGES[language] || language} review templates for {businessName} in the {category} category. Mention {shopName} naturally, use the ${tone} tone, and keep each review under 40 words.`;
+  const request = `Create one reusable instruction prompt for ${scope === 'shop' ? 'this specific business' : 'all businesses'}.
+Business name: ${businessName || '{businessName}'}
+Shop name: ${shopName || '{shopName}'}
+Category: ${category || '{category}'}
+Owner: ${ownerName || '{ownerName}'}
+Address: ${address || '{address}'}
+Phone: ${phone || '{phone}'}
+Tone: ${tone}
+Language: ${LANGUAGES[language] || language}
+Return only prompt text. Require native script for Gujarati or Hindi, natural first-person reviews, the business name, factual details, and maximum 40 words.`;
+  const providers = await getAIProviders();
+  for (const provider of providers) {
+    try {
+      const result = await requestProvider(provider, request);
+      if (result.text?.trim()) return result.text.trim();
+    } catch (error) {
+      console.error(`${provider.provider} prompt generation failed:`, error.message);
+    }
+  }
+  return fallback;
+}
+
 function generateMockReviews(count, language = 'english', shopName = 'this business') {
   const pools = {
     english: [
@@ -416,4 +440,4 @@ function generateMockReviews(count, language = 'english', shopName = 'this busin
   return result;
 }
 
-module.exports = { generateReviews, checkAIProviders };
+module.exports = { generateReviews, generatePromptSuggestion, checkAIProviders };

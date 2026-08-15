@@ -9,6 +9,11 @@ const reviewSchema = new mongoose.Schema({
   copiedByUA: { type: String },
   isPosted: { type: Boolean, default: false },
   postedAt: { type: Date },
+  generationProvider: { type: String, default: 'fallback' },
+  generationModel: { type: String, default: '' },
+  generationSource: { type: String, enum: ['ai', 'fallback'], default: 'fallback' },
+  generationPrompt: { type: String, default: '' },
+  generatedAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
 reviewSchema.index({ shop: 1, isUsed: 1 });

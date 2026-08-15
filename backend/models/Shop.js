@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const shopSchema = new mongoose.Schema({
   shopName: { type: String, required: true, trim: true },
   businessName: { type: String, required: true, trim: true },
+  category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
+  customCategory: { type: String, trim: true, default: '' },
   ownerName: { type: String, trim: true },
   address: { type: String, trim: true },
   phone: { type: String, trim: true },
