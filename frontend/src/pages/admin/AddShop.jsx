@@ -32,6 +32,7 @@ export default function AddShop() {
     category: '', customCategoryName: '', aiPrompt: '',
   });
   const [result, setResult] = useState(null);
+  const [generatingPrompt, setGeneratingPrompt] = useState(false);
 
   const fetchCategories = () => {
     api.get('/admin/categories?activeOnly=true')
@@ -61,10 +62,35 @@ export default function AddShop() {
         customCategoryName: '',
         reviewTone: selectedCat?.defaultTone || 'friendly',
         language: selectedCat?.defaultLanguage || 'english',
-        reviewPoolMin: selectedCat?.reviewPoolMin || 50,
+         reviewPoolMin: selectedCat?.reviewPoolMin || 50,
         reviewBatchSize: selectedCat?.reviewBatchSize || 50,
         aiPrompt: selectedCat?.defaultPrompt || '',
       });
+    }
+  };
+
+  const handleGeneratePrompt = async () => {
+    if (!form.shopName.trim()) {
+      toast.error('Please enter a shop name first');
+      return;
+    }
+    setGeneratingPrompt(true);
+    try {
+      const selectedCat = form.category ? categories.find((c) => c._id === form.category) : null;
+      const { data } = await api.post('/admin/categories/generate-prompt', {
+        name: selectedCat?.name || form.customCategoryName || '',
+        description: selectedCat?.description || '',
+        shopName: form.shopName,
+        businessName: form.businessName,
+        tone: form.reviewTone,
+        language: form.language,
+      });
+      setForm({ ...form, aiPrompt: data.prompt });
+      toast.success('AI prompt generated');
+    } catch {
+      toast.error('Failed to generate prompt');
+    } finally {
+      setGeneratingPrompt(false);
     }
   };
 
@@ -247,7 +273,17 @@ export default function AddShop() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">AI Generated Prompt</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">AI Generated Prompt</label>
+                <button
+                  type="button"
+                  onClick={handleGeneratePrompt}
+                  disabled={generatingPrompt || !form.shopName.trim()}
+                  className="px-3 py-1 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                >
+                  {generatingPrompt ? 'Generating...' : 'Generate'}
+                </button>
+              </div>
               <textarea
                 name="aiPrompt" value={form.aiPrompt} onChange={handleChange}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"

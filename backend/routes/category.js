@@ -1,30 +1,42 @@
 const router = require('express').Router();
+const multer = require('multer');
 const auth = require('../middleware/auth');
-const Category = require('../models/Category');
 const {
   getCategories,
   getCategory,
   createCategory,
   updateCategory,
   deleteCategory,
-  downloadTemplate,
-  uploadCategories,
-  generateCategoryPrompt,
-  getCategoryGenerationStats,
+  exportCategories,
+  importCategories,
+  downloadTemplate
 } = require('../controllers/categoryController');
-const upload = require('../middleware/upload');
+
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only Excel files allowed'));
+    }
+  }
+});
 
 router.use(auth(['admin']));
 
 router.get('/', getCategories);
-router.get('/stats', getCategoryGenerationStats);
-router.get('/template/download', downloadTemplate);
-router.post('/', createCategory);
-router.post('/upload', upload.single('file'), uploadCategories);
+router.get('/template', downloadTemplate);
+router.get('/export', exportCategories);
 router.get('/:id', getCategory);
+router.post('/', createCategory);
 router.put('/:id', updateCategory);
 router.delete('/:id', deleteCategory);
-router.post('/:id/generate-prompt', generateCategoryPrompt);
-router.post('/generate-prompt', generateCategoryPrompt);
+router.post('/import', upload.single('file'), importCategories);
 
 module.exports = router;

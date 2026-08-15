@@ -126,6 +126,8 @@ export default function Categories() {
       const { data } = await api.post('/admin/categories/generate-prompt', {
         name: form.name,
         description: form.description,
+        tone: form.defaultTone,
+        language: form.defaultLanguage,
       });
       setForm({ ...form, defaultPrompt: data.prompt });
       toast.success('AI prompt generated');

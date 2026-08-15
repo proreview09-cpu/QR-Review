@@ -141,14 +141,20 @@ export default function ShopDetail() {
   };
 
   const handleGeneratePrompt = async () => {
-    if (!editForm.shopName && !editForm.customCategoryName) {
-      toast.error('Please enter a shop or category name first');
+    if (!editForm.shopName) {
+      toast.error('Please enter a shop name first');
       return;
     }
     setGeneratingPrompt(true);
     try {
+      const selectedCat = editForm.category ? categories.find((c) => c._id === editForm.category) : shop.category;
       const { data } = await api.post('/admin/categories/generate-prompt', {
-        name: editForm.customCategoryName || '',
+        name: selectedCat?.name || '',
+        description: selectedCat?.description || '',
+        shopName: editForm.shopName,
+        businessName: editForm.businessName,
+        tone: editForm.reviewTone,
+        language: editForm.language,
       });
       setEditForm({ ...editForm, aiPrompt: data.prompt });
       setChanged(true);
