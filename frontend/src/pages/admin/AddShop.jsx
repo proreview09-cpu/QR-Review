@@ -1,8 +1,7 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import PromptVariables from '../../components/PromptVariables';
 
 const TONES = [
   { value: 'professional', label: 'Professional' },
@@ -19,42 +18,73 @@ const LANGUAGES = [
   { value: 'hindi', label: 'Hindi' },
 ];
 
-const PROMPT_MODES = [
-  { value: 'general', label: 'Use general prompt only' },
-  { value: 'combine', label: 'Combine general + shop prompt' },
-  { value: 'override', label: 'Override general with shop prompt' },
-];
-
-const emptyForm = {
-  ownerEmail: '', ownerName: '', ownerPassword: '',
-  businessName: '', shopName: '', address: '', phone: '', googleReviewUrl: '',
-  reviewTone: 'friendly', language: 'english',
-  customPrompt: '', promptMode: 'combine',
-  canOwnerSetTone: false, validityDays: 30, reviewPoolMin: 50, reviewBatchSize: 50,
-};
-
 export default function AddShop() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [categories, setCategories] = useState([]);
+  const [catsLoading, setCatsLoading] = useState(true);
+  const [showOtherCategory, setShowOtherCategory] = useState(false);
+  const [form, setForm] = useState({
+    ownerEmail: '', ownerName: '', ownerPassword: '',
+    businessName: '', shopName: '', address: '', phone: '',
+    googleReviewUrl: '', reviewTone: 'friendly', language: 'english',
+    canOwnerSetTone: false, reviewPoolMin: 50, reviewBatchSize: 50,
+    category: '', customCategoryName: '', aiPrompt: '',
+  });
   const [result, setResult] = useState(null);
+
+  const fetchCategories = () => {
+    api.get('/admin/categories?activeOnly=true')
+      .then(({ data }) => setCategories(data.categories))
+      .catch(() => toast.error('Failed to load categories'))
+      .finally(() => setCatsLoading(false));
+  };
+
+  useEffect(() => { fetchCategories(); }, []);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setForm({ ...form, [name]: type === 'checkbox' ? checked : value });
   };
 
-  const insertPromptVariable = (variable) => {
-    setForm((current) => ({
-      ...current,
-      customPrompt: `${current.customPrompt}${current.customPrompt && !/\s$/.test(current.customPrompt) ? ' ' : ''}${variable}`,
-    }));
+  const handleCategoryChange = (e) => {
+    const value = e.target.value;
+    if (value === 'other') {
+      setShowOtherCategory(true);
+      setForm({ ...form, category: '', customCategoryName: '' });
+    } else {
+      setShowOtherCategory(false);
+      const selectedCat = categories.find((c) => c._id === value);
+      setForm({
+        ...form,
+        category: value,
+        customCategoryName: '',
+        reviewTone: selectedCat?.defaultTone || 'friendly',
+        language: selectedCat?.defaultLanguage || 'english',
+        reviewPoolMin: selectedCat?.reviewPoolMin || 50,
+        reviewBatchSize: selectedCat?.reviewBatchSize || 50,
+        aiPrompt: selectedCat?.defaultPrompt || '',
+      });
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const { data } = await api.post('/admin/shops', form);
+      const payload = { ...form };
+      if (!payload.category && payload.customCategoryName) {
+        const { data: catData } = await api.post('/admin/categories', {
+          name: payload.customCategoryName,
+          description: '',
+          defaultTone: payload.reviewTone,
+          defaultLanguage: payload.language,
+          isActive: true,
+        });
+        payload.category = catData.category._id;
+      }
+      delete payload.customCategoryName;
+      const { data } = await api.post('/admin/shops', payload);
       toast.success('Shop created successfully!');
       setResult(data);
     } catch (err) {
@@ -81,13 +111,23 @@ export default function AddShop() {
             </div>
           </div>
           {result.warnings?.length > 0 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-sm text-yellow-800">
-              {result.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              {result.warnings.map((w, i) => <p key={i} className="text-yellow-800 text-sm">{w}</p>)}
             </div>
           )}
           <div className="flex gap-3">
             <Link to={`/admin/shops/${result.shop._id}`} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">View Shop</Link>
-            <button onClick={() => { setResult(null); setForm({ ...emptyForm }); }}
+            <button onClick={() => {
+              setResult(null);
+              setForm({
+                ownerEmail: '', ownerName: '', ownerPassword: '',
+                businessName: '', shopName: '', address: '', phone: '',
+                googleReviewUrl: '', reviewTone: 'friendly', language: 'english',
+                canOwnerSetTone: false, reviewPoolMin: 50, reviewBatchSize: 50,
+                category: '', customCategoryName: '', aiPrompt: '',
+              });
+              setShowOtherCategory(false);
+            }}
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Add Another</button>
           </div>
         </div>
@@ -95,104 +135,161 @@ export default function AddShop() {
     );
   }
 
+  if (catsLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-2xl">
       <h2 className="text-2xl font-bold mb-6">Add New Shop</h2>
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6 space-y-6">
         <div>
           <h3 className="text-lg font-semibold mb-3 border-b pb-2">Owner Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Owner Name" hint="Full name of the person who will use this account.">
-              <input name="ownerName" value={form.ownerName} onChange={handleChange} required className="input" placeholder="Rajesh Patel" />
-            </Field>
-            <Field label="Owner Email" hint="This email will be used for shop-owner login.">
-              <input name="ownerEmail" type="email" value={form.ownerEmail} onChange={handleChange} required className="input" placeholder="owner@example.com" />
-            </Field>
-            <Field label="Password" hint="Leave empty to use the default password configured by your system.">
-              <input name="ownerPassword" type="password" value={form.ownerPassword} onChange={handleChange} className="input" placeholder="Optional password" />
-            </Field>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Owner Name *</label>
+              <input name="ownerName" value={form.ownerName} onChange={handleChange} required
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Owner Email *</label>
+              <input name="ownerEmail" type="email" value={form.ownerEmail} onChange={handleChange} required
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <input name="ownerPassword" type="password" value={form.ownerPassword} onChange={handleChange}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Leave empty for default" />
+            </div>
           </div>
         </div>
 
         <div>
           <h3 className="text-lg font-semibold mb-3 border-b pb-2">Business Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Business Name" hint="Enter the exact name shown on Google Business Profile.">
-              <input name="businessName" value={form.businessName} onChange={handleChange} required className="input" placeholder="ABC Stores Pvt Ltd" />
-            </Field>
-            <Field label="Shop Display Name" hint="Short name customers will see on the review page.">
-              <input name="shopName" value={form.shopName} onChange={handleChange} required className="input" placeholder="ABC Stores" />
-            </Field>
-            <Field label="Phone" hint="Business contact number. Optional.">
-              <input name="phone" value={form.phone} onChange={handleChange} className="input" placeholder="+91 9876543210" />
-            </Field>
-            <Field label="Address" hint="Full shop address. Optional, but useful for context.">
-              <input name="address" value={form.address} onChange={handleChange} className="input" placeholder="Shop 12, Main Road, City" />
-            </Field>
-            <Field label="Google Review URL" hint="Google Business Profile -> Ask for reviews -> Copy link.">
-              <input name="googleReviewUrl" value={form.googleReviewUrl} onChange={handleChange} required className="input" placeholder="https://search.google.com/local/writereview?..." />
-            </Field>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Business Name *</label>
+              <input name="businessName" value={form.businessName} onChange={handleChange} required
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="ABC Stores Pvt Ltd" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Shop Display Name *</label>
+              <input name="shopName" value={form.shopName} onChange={handleChange} required
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="ABC Stores" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+              <input name="phone" value={form.phone} onChange={handleChange}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="+91 9876543210" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+              <input name="address" value={form.address} onChange={handleChange}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Shop 12, ABC Complex, Main Road, City" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Google Review URL *</label>
+              <input name="googleReviewUrl" value={form.googleReviewUrl} onChange={handleChange} required
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="https://search.google.com/local/writereview?placeid=..." />
+              <p className="text-xs text-gray-400 mt-1">Google Business Profile &gt; Ask for reviews &gt; Copy link</p>
+            </div>
           </div>
         </div>
 
         <div>
-          <h3 className="text-lg font-semibold mb-3 border-b pb-2">Review Settings</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Review Tone" hint="Controls the writing style of generated review templates.">
-              <select name="reviewTone" value={form.reviewTone} onChange={handleChange} className="input bg-white">
-                {TONES.map((tone) => <option key={tone.value} value={tone.value}>{tone.label}</option>)}
+          <h3 className="text-lg font-semibold mb-3 border-b pb-2">Category &amp; Review Settings</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <select value={form.category ? form.category : 'other'} onChange={handleCategoryChange}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                <option value="">Select a category</option>
+                {categories.map((cat) => (
+                  <option key={cat._id} value={cat._id}>{cat.name}</option>
+                ))}
+                <option value="other">Other (create new)</option>
               </select>
-            </Field>
-            <Field label="Review Language" hint="Language in which ChatGPT should write reviews.">
-              <select name="language" value={form.language} onChange={handleChange} className="input bg-white">
-                {LANGUAGES.map((language) => <option key={language.value} value={language.value}>{language.label}</option>)}
-              </select>
-            </Field>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Shop-Specific Prompt</label>
-              <textarea name="customPrompt" value={form.customPrompt} onChange={handleChange} rows="4" className="input resize-y"
-                placeholder="Example: Mention fast delivery, fresh products, helpful staff, and family-friendly service." />
-              <p className="hint">Optional instructions only for this shop. Add factual details you want reflected in the reviews.</p>
-              <PromptVariables onInsert={insertPromptVariable} />
             </div>
-            <Field label="Prompt Behavior" hint="Choose how this shop prompt works with the general admin prompt.">
-              <select name="promptMode" value={form.promptMode} onChange={handleChange} className="input bg-white">
-                {PROMPT_MODES.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
-              </select>
-            </Field>
-            <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 h-full">
-              <input type="checkbox" name="canOwnerSetTone" checked={form.canOwnerSetTone} onChange={handleChange} className="w-4 h-4 text-blue-600 rounded" />
+
+            {showOtherCategory && (
               <div>
-                <label className="text-sm font-medium text-gray-700">Allow owner to change tone/language</label>
-                <p className="hint">If unchecked, only admin can change these settings.</p>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Category Name</label>
+                <input
+                  name="customCategoryName" value={form.customCategoryName} onChange={handleChange}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="Enter new category name"
+                />
+                <p className="text-xs text-gray-400 mt-1">A new category will be created automatically with current tone/language settings</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Review Tone</label>
+                <select name="reviewTone" value={form.reviewTone} onChange={handleChange}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                  {TONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Review Language</label>
+                <select name="language" value={form.language} onChange={handleChange}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                  {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Gujarati shops get Gujarati reviews, Hindi shops get Hindi reviews</p>
               </div>
             </div>
-            <Field label="Review Pool Size" hint="Minimum number of unused reviews kept in the queue.">
-              <input type="number" name="reviewPoolMin" value={form.reviewPoolMin} onChange={handleChange} min="10" max="500" className="input" />
-            </Field>
-            <Field label="Generate Batch Size" hint="Number of reviews generated whenever the queue needs refilling.">
-              <input type="number" name="reviewBatchSize" value={form.reviewBatchSize} onChange={handleChange} min="10" max="200" className="input" />
-            </Field>
-            <Field label="Account Validity (days)" hint="Owner login, QR, and review link stop after this period. Use 0 for unlimited.">
-              <input type="number" name="validityDays" value={form.validityDays} onChange={handleChange} min="0" max="3650" className="input" />
-            </Field>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">AI Generated Prompt</label>
+              <textarea
+                name="aiPrompt" value={form.aiPrompt} onChange={handleChange}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                rows={3}
+                placeholder="Custom prompt for this shop. Use [SHOP_NAME] as placeholder for the shop name."
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Optional. Uses category default prompt if left empty. Use <code className="bg-gray-100 px-1 rounded">[SHOP_NAME]</code> for dynamic shop name.
+              </p>
+            </div>
+
+            <div className="md:col-span-2 flex items-center gap-3 bg-gray-50 rounded-lg p-3">
+              <input type="checkbox" name="canOwnerSetTone" checked={form.canOwnerSetTone} onChange={handleChange}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
+              <div>
+                <label className="text-sm font-medium text-gray-700">Allow owner to change tone/language</label>
+                <p className="text-xs text-gray-400">If unchecked, only admin can modify review tone &amp; language</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Review Pool Size</label>
+                <input type="number" name="reviewPoolMin" value={form.reviewPoolMin} onChange={handleChange} min="10" max="500"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                <p className="text-xs text-gray-400 mt-1">Min reviews always available in queue</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Generate Batch Size</label>
+                <input type="number" name="reviewBatchSize" value={form.reviewBatchSize} onChange={handleChange} min="10" max="200"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                <p className="text-xs text-gray-400 mt-1">How many reviews to generate at once</p>
+              </div>
+            </div>
           </div>
         </div>
 
-        <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+        <button type="submit" disabled={loading}
+          className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
           {loading ? 'Creating...' : 'Create Shop'}
         </button>
       </form>
-    </div>
-  );
-}
-
-function Field({ label, hint, children }) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      {children}
-      <p className="hint">{hint}</p>
     </div>
   );
 }

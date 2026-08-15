@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import PromptVariables from '../../components/PromptVariables';
 
 const TONES = [
   { value: 'professional', label: 'Professional' },
@@ -19,36 +18,27 @@ const LANGUAGES = [
   { value: 'hindi', label: 'Hindi' },
 ];
 
-const PROMPT_MODES = [
-  { value: 'general', label: 'Use general prompt only' },
-  { value: 'combine', label: 'Combine general + shop prompt' },
-  { value: 'override', label: 'Override general with shop prompt' },
-];
-
-function toLocalDateTime(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  const pad = (number) => String(number).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 export default function ShopDetail() {
   const { id } = useParams();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const readOnly = searchParams.get('mode') === 'view';
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [catsLoading, setCatsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [changed, setChanged] = useState(false);
   const [reviewHistory, setReviewHistory] = useState([]);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewTotal, setReviewTotal] = useState(0);
-  const [resetOpen, setResetOpen] = useState(false);
-  const [resetPassword, setResetPassword] = useState('');
-  const [resetResult, setResetResult] = useState('');
-  const [resetting, setResetting] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [showOtherCategory, setShowOtherCategory] = useState(false);
+  const [generatingPrompt, setGeneratingPrompt] = useState(false);
+
+  const fetchCategories = () => {
+    api.get('/admin/categories?activeOnly=true')
+      .then(({ data }) => setCategories(data.categories))
+      .catch(() => toast.error('Failed to load categories'))
+      .finally(() => setCatsLoading(false));
+  };
 
   const fetchShop = () => {
     api.get(`/admin/shops/${id}`)
@@ -59,16 +49,18 @@ export default function ShopDetail() {
           ownerName: data.shop.ownerName || '', address: data.shop.address || '',
           phone: data.shop.phone || '', googleReviewUrl: data.shop.googleReviewUrl,
           reviewTone: data.shop.reviewTone, language: data.shop.language || 'english',
-          customPrompt: data.shop.customPrompt || '', promptMode: data.shop.promptMode || 'general',
           isActive: data.shop.isActive, canOwnerSetTone: data.shop.canOwnerSetTone || false,
           reviewPoolMin: data.shop.reviewPoolMin || 50, reviewBatchSize: data.shop.reviewBatchSize || 50,
-          expiresAt: toLocalDateTime(data.shop.expiresAt),
+          category: data.shop.category?._id || '',
+          customCategoryName: '',
+          aiPrompt: data.shop.aiPrompt || '',
         });
         setChanged(false);
         fetchReviewHistory();
+        fetchCategories();
       })
       .catch(() => toast.error('Failed to load shop'))
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); });
   };
 
   useEffect(() => { fetchShop(); }, [id]);
@@ -87,18 +79,47 @@ export default function ShopDetail() {
     setChanged(true);
   };
 
-  const insertPromptVariable = (variable) => {
-    setEditForm((current) => ({
-      ...current,
-      customPrompt: `${current.customPrompt || ''}${current.customPrompt && !/\s$/.test(current.customPrompt) ? ' ' : ''}${variable}`,
-    }));
+  const handleCategoryChange = (e) => {
+    const value = e.target.value;
+    if (value === 'other') {
+      setShowOtherCategory(true);
+      setEditForm({ ...editForm, category: '', customCategoryName: '' });
+    } else if (value) {
+      setShowOtherCategory(false);
+      const selectedCat = categories.find((c) => c._id === value);
+      setEditForm({
+        ...editForm,
+        category: value,
+        customCategoryName: '',
+        reviewTone: selectedCat?.defaultTone || 'friendly',
+        language: selectedCat?.defaultLanguage || 'english',
+        reviewPoolMin: selectedCat?.reviewPoolMin || 50,
+        reviewBatchSize: selectedCat?.reviewBatchSize || 50,
+        aiPrompt: selectedCat?.defaultPrompt || '',
+      });
+    }
     setChanged(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = { ...editForm, expiresAt: editForm.expiresAt ? new Date(editForm.expiresAt).toISOString() : null };
+      const payload = { ...editForm };
+      if (!payload.category && payload.customCategoryName) {
+        try {
+          const { data: catData } = await api.post('/admin/categories', {
+            name: payload.customCategoryName,
+            description: '',
+            defaultTone: payload.reviewTone,
+            defaultLanguage: payload.language,
+            isActive: true,
+          });
+          payload.category = catData.category._id;
+        } catch (catErr) {
+          console.error('Category creation skipped:', catErr.message);
+        }
+      }
+      delete payload.customCategoryName;
       await api.put(`/admin/shops/${id}`, payload);
       toast.success('Shop updated');
       fetchShop();
@@ -111,76 +132,73 @@ export default function ShopDetail() {
 
   const handleRegenerate = async () => {
     try {
-      const { data: result } = await api.post(`/admin/shops/${id}/regenerate`);
-      toast.success(result.message || 'Reviews regenerated');
-      fetchShop();
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to regenerate');
+      await api.post(`/public/shop/${id}/generate`);
+      toast.success('Regenerating reviews...');
+      setTimeout(fetchShop, 2000);
+    } catch {
+      toast.error('Failed to regenerate');
     }
   };
 
-  const handleResetPassword = async () => {
-    setResetting(true);
+  const handleGeneratePrompt = async () => {
+    if (!editForm.shopName && !editForm.customCategoryName) {
+      toast.error('Please enter a shop or category name first');
+      return;
+    }
+    setGeneratingPrompt(true);
     try {
-      const { data: result } = await api.post(`/admin/shops/${id}/reset-owner-password`, { password: resetPassword });
-      setResetResult(result.temporaryPassword);
-      setResetPassword('');
-      toast.success('Owner password reset');
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to reset password');
+      const { data } = await api.post('/admin/categories/generate-prompt', {
+        name: editForm.customCategoryName || '',
+      });
+      setEditForm({ ...editForm, aiPrompt: data.prompt });
+      setChanged(true);
+      toast.success('AI prompt generated');
+    } catch {
+      toast.error('Failed to generate prompt');
     } finally {
-      setResetting(false);
+      setGeneratingPrompt(false);
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" /></div>;
+  if (loading || catsLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
   if (!data) return <p>Shop not found.</p>;
 
   const { shop, stats, tokenUsage } = data;
   const reviewLink = `${window.location.origin}/review/${shop._id}`;
+  const reviewsGenerated = tokenUsage?.reviewsGenerated || 0;
+  const promptTokens = tokenUsage?.promptTokens || 0;
+  const completionTokens = tokenUsage?.completionTokens || 0;
 
   return (
     <div className="max-w-3xl">
       <div className="flex items-center gap-4 mb-6">
         <Link to="/admin/shops" className="text-gray-400 hover:text-gray-600">&larr; Back</Link>
         <h2 className="text-2xl font-bold">{shop.shopName}</h2>
-        {readOnly && <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">View only</span>}
-        {readOnly && <button onClick={() => navigate(`/admin/shops/${id}?mode=edit`)} className="ml-auto rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700">Edit entry</button>}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-blue-50 rounded-lg p-4 text-center">
-          <p className="text-2xl font-bold text-blue-700">{stats.totalReviews}</p>
-          <p className="text-sm text-blue-600">Total</p>
-        </div>
-        <div className="bg-green-50 rounded-lg p-4 text-center">
-          <p className="text-2xl font-bold text-green-700">{stats.availableReviews}</p>
-          <p className="text-sm text-green-600">Available</p>
-        </div>
-        <div className="bg-orange-50 rounded-lg p-4 text-center">
-          <p className="text-2xl font-bold text-orange-700">{stats.usedReviews}</p>
-          <p className="text-sm text-orange-600">Copied</p>
-        </div>
-        <div className="bg-purple-50 rounded-lg p-4 text-center">
-          <p className="text-2xl font-bold text-purple-700">{stats.postedReviews || 0}</p>
-          <p className="text-sm text-purple-600">Posted</p>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <StatCard label="Total Reviews" value={stats.totalReviews} color="blue" />
+        <StatCard label="Available" value={stats.availableReviews} color="green" />
+        <StatCard label="Copied" value={stats.usedReviews} color="orange" />
+        <StatCard label="Posted" value={stats.postedReviews || 0} color="purple" />
+        <StatCard label="Reviews Generated" value={reviewsGenerated} color="teal" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-indigo-50 rounded-lg p-4 text-center">
-          <p className="text-2xl font-bold text-indigo-700">{tokenUsage?.totalCalls || 0}</p>
-          <p className="text-sm text-indigo-600">ChatGPT API Calls</p>
-        </div>
-        <div className="bg-pink-50 rounded-lg p-4 text-center">
-          <p className="text-2xl font-bold text-pink-700">{tokenUsage?.totalTokens?.toLocaleString() || 0}</p>
-          <p className="text-sm text-pink-600">Tokens Used</p>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <StatCard label="ChatGPT API Calls" value={tokenUsage?.totalCalls || 0} color="indigo" />
+        <StatCard label="Total Tokens" value={tokenUsage?.totalTokens?.toLocaleString() || 0} color="pink" />
+        <StatCard label="Prompt Tokens" value={promptTokens?.toLocaleString() || 0} color="slate" />
+        <StatCard label="Completion Tokens" value={completionTokens?.toLocaleString() || 0} color="amber" />
       </div>
 
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <h3 className="text-lg font-semibold mb-4">Business Details</h3>
-        <fieldset disabled={readOnly} className="contents">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
@@ -213,36 +231,111 @@ export default function ShopDetail() {
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
         </div>
-        </fieldset>
       </div>
 
       <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 className="text-lg font-semibold mb-4">Review Settings</h3>
-        <fieldset disabled={readOnly} className="contents">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <h3 className="text-lg font-semibold mb-4">Category &amp; Review Settings</h3>
+        <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Review Tone</label>
-            <select name="reviewTone" value={editForm.reviewTone || 'friendly'} onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-              {TONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              value={editForm.category ? (showOtherCategory ? 'other' : editForm.category) : (showOtherCategory ? 'other' : '')}
+              onChange={handleCategoryChange}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+            >
+              <option value="">No category</option>
+              {categories.map((cat) => (
+                <option key={cat._id} value={cat._id}>{cat.name}</option>
+              ))}
+              <option value="other">Other (create new)</option>
             </select>
+            {shop.category && (
+              <p className="text-xs text-gray-400 mt-1">
+                Current: <span className="font-medium text-gray-700">{shop.category.name}</span>
+              </p>
+            )}
           </div>
+
+          {showOtherCategory && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">New Category Name</label>
+              <input
+                name="customCategoryName" value={editForm.customCategoryName || ''}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Enter new category name"
+              />
+              <p className="text-xs text-gray-400 mt-1">A new category will be created with the current settings</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Review Tone</label>
+              <select name="reviewTone" value={editForm.reviewTone || 'friendly'} onChange={handleChange}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                {TONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Review Language</label>
+              <select name="language" value={editForm.language || 'english'} onChange={handleChange}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Native language reviews (Gujarati shops get Gujarati, etc.)</p>
+            </div>
+          </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Review Language</label>
-            <select name="language" value={editForm.language || 'english'} onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-              {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-            </select>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">AI Generated Prompt</label>
+              <button
+                type="button"
+                onClick={handleGeneratePrompt}
+                disabled={generatingPrompt}
+                className="px-3 py-1 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+              >
+                {generatingPrompt ? 'Generating...' : 'Generate AI Prompt'}
+              </button>
+            </div>
+            <textarea
+              name="aiPrompt" value={editForm.aiPrompt || ''} onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              rows={4}
+              placeholder="Custom prompt for review generation. Use [SHOP_NAME] for dynamic shop name."
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Use <code className="bg-gray-100 px-1 rounded">[SHOP_NAME]</code> to reference the shop name dynamically.
+              Empty = system default prompt.
+            </p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select name="isActive" value={editForm.isActive ? 'true' : 'false'} onChange={(e) => { setEditForm({ ...editForm, isActive: e.target.value === 'true' }); setChanged(true); }}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-              <option value="true">Active</option>
-              <option value="false">Inactive</option>
-            </select>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Review Pool Size (Queue)</label>
+              <input type="number" name="reviewPoolMin" value={editForm.reviewPoolMin || 50} onChange={handleChange} min="10"
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+              <p className="text-xs text-gray-400 mt-1">Min reviews always in queue</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Generate Batch</label>
+              <input type="number" name="reviewBatchSize" value={editForm.reviewBatchSize || 50} onChange={handleChange} min="10"
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+              <p className="text-xs text-gray-400 mt-1">Reviews per generation batch</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 h-full">
+
+          <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
+            <input type="checkbox" name="isActive" checked={editForm.isActive !== false} onChange={handleChange}
+              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
+            <div className="flex-1">
+              <label className="text-sm font-medium text-gray-700">Shop is active</label>
+              <p className="text-xs text-gray-400">Inactive shops won't receive new reviews</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
             <input type="checkbox" name="canOwnerSetTone" checked={editForm.canOwnerSetTone || false} onChange={handleChange}
               className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
             <div>
@@ -250,62 +343,25 @@ export default function ShopDetail() {
               <p className="text-xs text-gray-400">Owner can modify review settings if enabled</p>
             </div>
           </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Shop-Specific Prompt</label>
-            <textarea name="customPrompt" value={editForm.customPrompt || ''} onChange={handleChange} rows="4"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-y"
-              placeholder="Example: Mention quick service, fresh products, and helpful staff." />
-            <p className="text-xs text-gray-400 mt-1">Optional instructions specific to this shop.</p>
-            <PromptVariables onInsert={insertPromptVariable} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Prompt Behavior</label>
-            <select name="promptMode" value={editForm.promptMode || 'general'} onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-              {PROMPT_MODES.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
-            </select>
-            <p className="text-xs text-gray-400 mt-1">Choose how the shop prompt uses the general prompt.</p>
-            {editForm.customPrompt && editForm.promptMode === 'general' && (
-              <p className="text-xs text-amber-600 mt-1">Shop prompt is currently ignored. Select Combine or Override to use it.</p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Pool Size (Queue)</label>
-            <input type="number" name="reviewPoolMin" value={editForm.reviewPoolMin ?? ''} onChange={handleChange} min="10"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-            <p className="text-xs text-gray-400 mt-1">Minimum reviews always in queue.</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Generate Batch</label>
-            <input type="number" name="reviewBatchSize" value={editForm.reviewBatchSize ?? ''} onChange={handleChange} min="10"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-            <p className="text-xs text-gray-400 mt-1">Reviews generated per refill.</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Valid Until</label>
-            <input type="datetime-local" name="expiresAt" value={editForm.expiresAt ?? ''} onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-            <p className="text-xs text-gray-400 mt-1">After this time, login, QR, and review link deactivate. Clear for unlimited.</p>
-          </div>
         </div>
-        </fieldset>
+
         <div className="mt-4 flex gap-3">
-          {!readOnly && <button onClick={handleSave} disabled={saving}
+          <button onClick={handleSave} disabled={saving}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
             {saving ? 'Saving...' : 'Save Changes'}
-          </button>}
-          {!readOnly && <button onClick={handleRegenerate}
+          </button>
+          <button onClick={handleRegenerate}
             className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
             Regenerate Reviews
-          </button>}
-          {!readOnly && changed && (
+          </button>
+          {changed && (
             <span className="text-sm text-amber-600 self-center">Unsaved changes</span>
           )}
         </div>
       </div>
 
       <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 className="text-lg font-semibold mb-4">QR Code & Link</h3>
+        <h3 className="text-lg font-semibold mb-4">QR Code &amp; Link</h3>
         {shop.qrCodeData ? (
           <div className="text-center mb-4">
             <img src={shop.qrCodeData} alt={`QR Code for ${shop.shopName}`} className="mx-auto w-64 h-64" />
@@ -334,23 +390,7 @@ export default function ShopDetail() {
         <p><span className="text-gray-500">Name:</span> {shop.owner?.name}</p>
         <p><span className="text-gray-500">Email:</span> {shop.owner?.email}</p>
         <p className="text-sm text-gray-400 mt-2">Created: {new Date(shop.createdAt).toLocaleDateString()}</p>
-        <div className="mt-5 border-t border-slate-100 pt-4">
-          <p className="text-sm font-bold text-slate-700">Password access</p>
-          <p className="mt-1 text-xs text-slate-400">Old passwords cannot be viewed because they are securely hashed. You can set a new password or generate a temporary one.</p>
-          <button onClick={() => { setResetOpen(!resetOpen); setResetResult(''); }} className="mt-3 rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50">
-            Reset owner password
-          </button>
-          {resetOpen && (
-            <div className="mt-3 rounded-xl bg-slate-50 p-4">
-              <label className="block text-xs font-bold text-slate-600">New password (optional)</label>
-              <input type="text" value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} placeholder="Leave blank to generate one" className="input mt-2 bg-white" />
-              <button onClick={handleResetPassword} disabled={resetting} className="mt-3 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50">
-                {resetting ? 'Resetting...' : 'Confirm reset'}
-              </button>
-              {resetResult && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3"><p className="text-xs font-bold text-emerald-700">New password (copy it now)</p><div className="mt-1 flex items-center gap-2"><code className="flex-1 break-all text-sm font-bold text-emerald-900">{resetResult}</code><button onClick={() => { navigator.clipboard.writeText(resetResult); toast.success('Password copied'); }} className="rounded bg-white px-2 py-1 text-xs font-bold text-emerald-700">Copy</button></div></div>}
-            </div>
-          )}
-        </div>
+        <p className="text-sm text-gray-400">Language: {shop.language === 'gujarati' ? 'ગુજરાતી (Native)' : shop.language === 'hindi' ? 'हिन्दी (Native)' : 'English'}</p>
       </div>
 
       <div className="bg-white rounded-lg shadow p-6">
@@ -399,6 +439,22 @@ export default function ShopDetail() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, color }) {
+  const colors = {
+    blue: 'bg-blue-50 text-blue-700', green: 'bg-green-50 text-green-700',
+    purple: 'bg-purple-50 text-purple-700', orange: 'bg-orange-50 text-orange-700',
+    teal: 'bg-teal-50 text-teal-700', indigo: 'bg-indigo-50 text-indigo-700',
+    pink: 'bg-pink-50 text-pink-700', slate: 'bg-slate-100 text-slate-700',
+    amber: 'bg-amber-50 text-amber-700',
+  };
+  return (
+    <div className={`rounded-lg p-4 ${colors[color] || colors.blue}`}>
+      <p className="text-sm font-medium opacity-75">{label}</p>
+      <p className="text-2xl font-bold mt-1">{value}</p>
     </div>
   );
 }

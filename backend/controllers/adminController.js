@@ -1,89 +1,12 @@
 const User = require('../models/User');
-const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
 const Shop = require('../models/Shop');
-const Category = require('../models/Category');
 const Review = require('../models/Review');
 const Setting = require('../models/Setting');
 const TokenUsage = require('../models/TokenUsage');
 const ActivityLog = require('../models/ActivityLog');
-const AIProviderStatus = require('../models/AIProviderStatus');
 const { generateQR } = require('../services/qrService');
-const { generateReviews, generatePromptSuggestion, checkAIProviders } = require('../services/openaiService');
+const { generateReviews } = require('../services/openaiService');
 const { log } = require('../services/logService');
-
-const AI_PROVIDER_LABELS = {
-  openai: 'OpenAI',
-  gemini: 'Google Gemini',
-  anthropic: 'Anthropic Claude',
-  groq: 'Groq',
-};
-
-function expiryFromDays(value) {
-  const days = Number(value);
-  if (!Number.isFinite(days) || days <= 0) return null;
-  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-}
-
-async function getAIProviderSnapshot() {
-  const [providerSetting, oldOpenAI, statuses, usage] = await Promise.all([
-    Setting.findOne({ key: 'aiProviders' }).lean().exec(),
-    Setting.findOne({ key: 'openaiApiKey' }).lean().exec(),
-    AIProviderStatus.find().lean().exec(),
-    TokenUsage.aggregate([
-      { $group: {
-        _id: '$provider',
-        totalTokens: { $sum: '$totalTokens' },
-        apiCalls: { $sum: 1 },
-        successfulCalls: { $sum: { $cond: ['$success', 1, 0] } },
-        failedCalls: { $sum: { $cond: ['$success', 0, 1] } },
-        reviewsGenerated: { $sum: '$reviewsGenerated' },
-      } },
-    ]).exec(),
-  ]);
-
-  const configured = Array.isArray(providerSetting?.value) && providerSetting.value.length
-    ? providerSetting.value
-    : (oldOpenAI?.value ? [{ provider: 'openai', enabled: true }] : []);
-  const names = [...new Set([
-    ...configured.map((item) => item.provider),
-    ...statuses.map((item) => item.provider),
-    ...usage.map((item) => item._id),
-  ].filter(Boolean))];
-  const statusByProvider = new Map(statuses.map((item) => [item.provider, item]));
-  const usageByProvider = new Map(usage.map((item) => [item._id, item]));
-
-  const providers = names.map((provider) => ({
-    provider,
-    label: AI_PROVIDER_LABELS[provider] || provider,
-    enabled: configured.find((item) => item.provider === provider)?.enabled !== false,
-    status: statusByProvider.get(provider)?.status || 'unknown',
-    lastError: statusByProvider.get(provider)?.lastError || '',
-    lastAttemptAt: statusByProvider.get(provider)?.lastAttemptAt || null,
-    lastSuccessAt: statusByProvider.get(provider)?.lastSuccessAt || null,
-    consecutiveFailures: statusByProvider.get(provider)?.consecutiveFailures || 0,
-    quotaStatus: statusByProvider.get(provider)?.quotaStatus || 'unknown',
-    models: statusByProvider.get(provider)?.models || [],
-    selectedModel: statusByProvider.get(provider)?.selectedModel || '',
-    lastHealthCheckAt: statusByProvider.get(provider)?.lastHealthCheckAt || null,
-    totalTokens: usageByProvider.get(provider)?.totalTokens || 0,
-    apiCalls: usageByProvider.get(provider)?.apiCalls || 0,
-    successfulCalls: usageByProvider.get(provider)?.successfulCalls || 0,
-    failedCalls: usageByProvider.get(provider)?.failedCalls || 0,
-    reviewsGenerated: usageByProvider.get(provider)?.reviewsGenerated || 0,
-  }));
-  const active = providers
-    .filter((provider) => provider.status === 'active')
-    .sort((a, b) => new Date(b.lastSuccessAt || 0) - new Date(a.lastSuccessAt || 0))[0];
-  const hasFailed = providers.some((provider) => provider.status === 'failed');
-
-  return {
-    providers,
-    currentProvider: active?.provider || null,
-    currentProviderLabel: active?.label || null,
-    fallbackUsed: !active && (hasFailed || providers.length === 0),
-  };
-}
 
 exports.getDashboard = async (req, res) => {
   try {
@@ -98,7 +21,6 @@ exports.getDashboard = async (req, res) => {
     const tokenStats = await TokenUsage.aggregate([
       { $group: { _id: null, totalTokens: { $sum: '$totalTokens' }, totalCalls: { $sum: 1 }, promptTokens: { $sum: '$promptTokens' }, completionTokens: { $sum: '$completionTokens' } } },
     ]);
-    const aiStatus = await getAIProviderSnapshot();
 
     const recentShops = await Shop.find()
       .sort({ createdAt: -1 })
@@ -113,7 +35,6 @@ exports.getDashboard = async (req, res) => {
         totalReviewsCopied: totalReviewsCopied[0]?.total || 0,
         totalReviewsGenerated,
         tokenUsage: tokenStats[0] || { totalTokens: 0, totalCalls: 0, promptTokens: 0, completionTokens: 0 },
-        aiStatus,
       },
       recentShops,
     });
@@ -122,26 +43,9 @@ exports.getDashboard = async (req, res) => {
   }
 };
 
-exports.getAIStatus = async (req, res) => {
-  try {
-    res.json(await getAIProviderSnapshot());
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-exports.checkAIStatus = async (req, res) => {
-  try {
-    await checkAIProviders();
-    res.json(await getAIProviderSnapshot());
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
 exports.getShops = async (req, res) => {
   try {
-    const shops = await Shop.find().populate('owner', 'name email').sort({ createdAt: -1 });
+    const shops = await Shop.find().populate('owner', 'name email').populate('category', 'name').sort({ createdAt: -1 });
     res.json({ shops });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -150,7 +54,7 @@ exports.getShops = async (req, res) => {
 
 exports.createShop = async (req, res) => {
   try {
-    const { ownerEmail, ownerName, ownerPassword, shopName, businessName, category, customCategory, googleReviewUrl, reviewTone, address, phone, language, customPrompt, promptMode, canOwnerSetTone, reviewPoolMin, reviewBatchSize, validityDays } = req.body;
+    const { ownerEmail, ownerName, ownerPassword, shopName, businessName, googleReviewUrl, reviewTone, address, phone, language, canOwnerSetTone, reviewPoolMin, reviewBatchSize, category, aiPrompt } = req.body;
 
     let owner = await User.findOne({ email: ownerEmail?.toLowerCase() });
     if (!owner) {
@@ -165,20 +69,17 @@ exports.createShop = async (req, res) => {
     const shop = await Shop.create({
       shopName,
       businessName,
-      category: category || undefined,
-      customCategory: customCategory || '',
       ownerName,
       googleReviewUrl,
       reviewTone: reviewTone || 'friendly',
       address: address || '',
       phone: phone || '',
       language: language || 'english',
-      customPrompt: customPrompt || '',
-      promptMode: promptMode || 'general',
       canOwnerSetTone: canOwnerSetTone || false,
-      expiresAt: expiryFromDays(validityDays === undefined ? 30 : validityDays),
       reviewPoolMin: reviewPoolMin || 50,
       reviewBatchSize: reviewBatchSize || 50,
+      category: category || null,
+      aiPrompt: aiPrompt || '',
       owner: owner._id,
     });
 
@@ -191,15 +92,8 @@ exports.createShop = async (req, res) => {
 
     let warnings = [];
     try {
-      const categoryDoc = category ? await Category.findById(category).select('name') : null;
-      const reviews = await generateReviews(shopName, businessName, reviewTone || 'friendly', shop.reviewBatchSize || 50, language || 'english', shop._id, shop.customPrompt, shop.promptMode, {
-        ownerName: shop.ownerName,
-        address: shop.address,
-        phone: shop.phone,
-        category: customCategory || categoryDoc?.name || '',
-      });
-      const meta = reviews.generationMeta || {};
-      await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content, generationProvider: meta.provider, generationModel: meta.model, generationSource: meta.source, generationPrompt: meta.prompt })));
+      const reviews = await generateReviews(shopName, businessName, reviewTone || 'friendly', shop.reviewBatchSize || 50, language || 'english', shop._id, aiPrompt || '');
+      await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
       log('CREATE', 'reviews', `Generated ${reviews.length} reviews for "${shopName}"`, { performedBy: req.user.email, shop: shop._id });
     } catch (genErr) {
       console.error('Review generation failed, using fallback:', genErr.message);
@@ -216,28 +110,14 @@ exports.createShop = async (req, res) => {
 
 exports.updateShop = async (req, res) => {
   try {
-    const updates = { ...req.body };
-    if (Object.prototype.hasOwnProperty.call(updates, 'expiresAt')) {
-      updates.expiresAt = updates.expiresAt ? new Date(updates.expiresAt) : null;
-    }
-    const shop = await Shop.findByIdAndUpdate(req.params.id, updates, { new: true }).populate('owner', 'name email').populate('category', 'name');
+    const shop = await Shop.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('owner', 'name email');
     if (!shop) return res.status(404).json({ message: 'Shop not found' });
 
-    if (req.body.isActive !== undefined) {
-      await User.findByIdAndUpdate(shop.owner?._id || shop.owner, { isActive: req.body.isActive });
-    }
-
-    if (req.body.shopName || req.body.businessName || req.body.category || req.body.customCategory !== undefined || req.body.reviewTone || req.body.language || req.body.customPrompt !== undefined || req.body.promptMode) {
-      await Review.deleteMany({ shop: shop._id, isUsed: false });
+    if (req.body.shopName || req.body.businessName || req.body.reviewTone || req.body.language || req.body.aiPrompt || req.body.category) {
+      await Review.deleteMany({ shop: shop._id });
       try {
-        const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 50, shop.language, shop._id, shop.customPrompt, shop.promptMode, {
-          ownerName: shop.ownerName,
-          address: shop.address,
-          phone: shop.phone,
-          category: shop.customCategory || shop.category?.name || '',
-        });
-        const meta = reviews.generationMeta || {};
-        await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content, generationProvider: meta.provider, generationModel: meta.model, generationSource: meta.source, generationPrompt: meta.prompt })));
+        const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, 50, shop.language, shop._id, shop.aiPrompt || '');
+        await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
       } catch (genErr) {
         console.error('Review regeneration failed:', genErr.message);
       }
@@ -246,39 +126,6 @@ exports.updateShop = async (req, res) => {
     log('UPDATE', 'shop', `Updated shop "${shop.shopName}"`, { performedBy: req.user.email, performedByRole: 'admin', shop: shop._id });
     res.json({ shop });
   } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-exports.regenerateReviews = async (req, res) => {
-  try {
-    const shop = await Shop.findById(req.params.id).populate('category', 'name');
-    if (!shop) return res.status(404).json({ message: 'Shop not found' });
-
-    await Review.deleteMany({ shop: shop._id, isUsed: false });
-    const count = shop.reviewBatchSize || shop.reviewPoolMin || 50;
-    const reviews = await generateReviews(
-      shop.shopName,
-      shop.businessName,
-      shop.reviewTone,
-      count,
-      shop.language,
-      shop._id,
-      shop.customPrompt,
-      shop.promptMode,
-      { ownerName: shop.ownerName, address: shop.address, phone: shop.phone, category: shop.customCategory || shop.category?.name || '' },
-    );
-    const meta = reviews.generationMeta || {};
-    await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content, generationProvider: meta.provider, generationModel: meta.model, generationSource: meta.source, generationPrompt: meta.prompt })));
-
-    log('REGENERATE', 'reviews', `Regenerated ${reviews.length} reviews for "${shop.shopName}"`, {
-      performedBy: req.user.email,
-      performedByRole: 'admin',
-      shop: shop._id,
-    });
-    res.json({ message: `Regenerated ${reviews.length} reviews`, generated: reviews.length });
-  } catch (error) {
-    log('ERROR', 'reviews', `Review regeneration failed: ${error.message}`, { performedBy: req.user.email, shop: req.params.id });
     res.status(500).json({ message: error.message });
   }
 };
@@ -295,57 +142,9 @@ exports.deleteShop = async (req, res) => {
   }
 };
 
-exports.resetOwnerPassword = async (req, res) => {
-  try {
-    const shop = await Shop.findById(req.params.id).populate('owner', 'name email').populate('category', 'name');
-    if (!shop?.owner) return res.status(404).json({ message: 'Shop owner not found' });
-
-    const requestedPassword = String(req.body.password || '').trim();
-    if (requestedPassword && requestedPassword.length < 6) {
-      return res.status(400).json({ message: 'Password must be at least 6 characters' });
-    }
-
-    const temporaryPassword = requestedPassword || `QR-${crypto.randomBytes(5).toString('hex')}`;
-    const owner = await User.findById(shop.owner._id);
-    owner.password = temporaryPassword;
-    await owner.save();
-
-    log('UPDATE', 'owner-password', `Reset password for ${shop.owner.email}`, {
-      performedBy: req.user.email,
-      performedByRole: 'admin',
-      shop: shop._id,
-    });
-    res.json({ message: 'Password reset successfully', temporaryPassword, owner: { name: owner.name, email: owner.email } });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-exports.impersonateOwner = async (req, res) => {
-  try {
-    const shop = await Shop.findById(req.params.id).populate('owner', 'name email role isActive');
-    if (!shop?.owner) return res.status(404).json({ message: 'Shop owner not found' });
-    if (!shop.owner.isActive) return res.status(400).json({ message: 'Shop owner account is inactive' });
-
-    const token = jwt.sign(
-      { id: shop.owner._id, role: 'shop_owner', impersonatedBy: req.user._id.toString() },
-      process.env.JWT_SECRET,
-      { expiresIn: '2h' },
-    );
-    log('LOGIN', 'impersonation', `Admin opened ${shop.owner.email} dashboard`, {
-      performedBy: req.user.email,
-      performedByRole: 'admin',
-      shop: shop._id,
-    });
-    res.json({ token, user: shop.owner, shopId: shop._id });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
 exports.getShop = async (req, res) => {
   try {
-    const shop = await Shop.findById(req.params.id).populate('owner', 'name email').populate('category', 'name');
+    const shop = await Shop.findById(req.params.id).populate('owner', 'name email').populate('category', 'name defaultTone defaultLanguage defaultPrompt');
     if (!shop) return res.status(404).json({ message: 'Shop not found' });
 
     const reviewStats = await Review.aggregate([
@@ -355,7 +154,7 @@ exports.getShop = async (req, res) => {
 
     const tokenStats = await TokenUsage.aggregate([
       { $match: { shop: shop._id } },
-      { $group: { _id: null, totalTokens: { $sum: '$totalTokens' }, totalCalls: { $sum: 1 } } },
+      { $group: { _id: null, totalTokens: { $sum: '$totalTokens' }, totalCalls: { $sum: 1 }, promptTokens: { $sum: '$promptTokens' }, completionTokens: { $sum: '$completionTokens' }, reviewsGenerated: { $sum: '$reviewsGenerated' } } },
     ]);
 
     // Generate QR using request domain (auto-detects Railway URL)
@@ -375,17 +174,8 @@ exports.getShop = async (req, res) => {
         postedReviews: reviewStats[0]?.posted || 0,
         availableReviews: (reviewStats[0]?.total || 0) - (reviewStats[0]?.used || 0),
       },
-      tokenUsage: tokenStats[0] || { totalTokens: 0, totalCalls: 0 },
+      tokenUsage: tokenStats[0] || { totalTokens: 0, totalCalls: 0, promptTokens: 0, completionTokens: 0, reviewsGenerated: 0 },
     });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-exports.generatePrompt = async (req, res) => {
-  try {
-    const prompt = await generatePromptSuggestion(req.body || {});
-    res.json({ prompt });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -394,18 +184,12 @@ exports.generatePrompt = async (req, res) => {
 exports.getSettings = async (req, res) => {
   try {
     const openaiKey = await Setting.findOne({ key: 'openaiApiKey' });
-    const aiProviders = await Setting.findOne({ key: 'aiProviders' });
     const defaultTone = await Setting.findOne({ key: 'defaultTone' });
     const defaultLanguage = await Setting.findOne({ key: 'defaultLanguage' });
-    const generalReviewPrompt = await Setting.findOne({ key: 'generalReviewPrompt' });
     res.json({
       openaiApiKey: openaiKey?.value || '',
-      aiProviders: Array.isArray(aiProviders?.value)
-        ? aiProviders.value
-        : (openaiKey?.value ? [{ provider: 'openai', apiKey: openaiKey.value, enabled: true }] : []),
       defaultTone: defaultTone?.value || 'friendly',
       defaultLanguage: defaultLanguage?.value || 'english',
-      generalReviewPrompt: generalReviewPrompt?.value || '',
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -414,31 +198,11 @@ exports.getSettings = async (req, res) => {
 
 exports.updateSettings = async (req, res) => {
   try {
-    const { openaiApiKey, aiProviders, defaultTone, defaultLanguage, generalReviewPrompt } = req.body;
+    const { openaiApiKey, defaultTone, defaultLanguage } = req.body;
     if (openaiApiKey !== undefined) {
       await Setting.findOneAndUpdate(
         { key: 'openaiApiKey' },
         { value: openaiApiKey },
-        { upsert: true, new: true },
-      );
-    }
-    if (Array.isArray(aiProviders)) {
-      const normalizedProviders = aiProviders
-        .filter((item) => item && ['openai', 'gemini', 'anthropic', 'groq'].includes(item.provider) && item.apiKey)
-        .map((item) => ({
-          provider: item.provider,
-          apiKey: String(item.apiKey).trim(),
-          enabled: item.enabled !== false,
-        }));
-      await Setting.findOneAndUpdate(
-        { key: 'aiProviders' },
-        { value: normalizedProviders },
-        { upsert: true, new: true },
-      );
-      const firstOpenAI = normalizedProviders.find((item) => item.provider === 'openai');
-      await Setting.findOneAndUpdate(
-        { key: 'openaiApiKey' },
-        { value: firstOpenAI?.apiKey || '' },
         { upsert: true, new: true },
       );
     }
@@ -453,13 +217,6 @@ exports.updateSettings = async (req, res) => {
       await Setting.findOneAndUpdate(
         { key: 'defaultLanguage' },
         { value: defaultLanguage },
-        { upsert: true, new: true },
-      );
-    }
-    if (generalReviewPrompt !== undefined) {
-      await Setting.findOneAndUpdate(
-        { key: 'generalReviewPrompt' },
-        { value: generalReviewPrompt },
         { upsert: true, new: true },
       );
     }
@@ -509,15 +266,13 @@ exports.getShopReviews = async (req, res) => {
     const shop = await Shop.findById(req.params.id);
     if (!shop) return res.status(404).json({ message: 'Shop not found' });
 
-    const filter = { shop: shop._id };
-    if (req.query.usedOnly === 'true') filter.isUsed = true;
-    const reviews = await Review.find(filter)
-      .sort({ generatedAt: -1 })
+    const reviews = await Review.find({ shop: shop._id, isUsed: true })
+      .sort({ usedAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit))
-      .select('content isUsed usedAt isPosted postedAt copiedByIp copiedByUA generationProvider generationModel generationSource generationPrompt generatedAt createdAt');
+      .select('content isUsed usedAt isPosted postedAt copiedByIp copiedByUA createdAt');
 
-    const total = await Review.countDocuments(filter);
+    const total = await Review.countDocuments({ shop: shop._id, isUsed: true });
 
     res.json({ reviews, total, page: Number(page), pages: Math.ceil(total / limit) });
   } catch (error) {

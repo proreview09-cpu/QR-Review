@@ -1,23 +1,30 @@
 const router = require('express').Router();
-const multer = require('multer');
 const auth = require('../middleware/auth');
+const Category = require('../models/Category');
 const {
-  listCategories,
+  getCategories,
+  getCategory,
   createCategory,
   updateCategory,
   deleteCategory,
   downloadTemplate,
-  importCategories,
+  uploadCategories,
+  generateCategoryPrompt,
+  getCategoryGenerationStats,
 } = require('../controllers/categoryController');
-
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = require('../middleware/upload');
 
 router.use(auth(['admin']));
-router.get('/', listCategories);
+
+router.get('/', getCategories);
+router.get('/stats', getCategoryGenerationStats);
+router.get('/template/download', downloadTemplate);
 router.post('/', createCategory);
+router.post('/upload', upload.single('file'), uploadCategories);
+router.get('/:id', getCategory);
 router.put('/:id', updateCategory);
 router.delete('/:id', deleteCategory);
-router.get('/template', downloadTemplate);
-router.post('/import', upload.single('file'), importCategories);
+router.post('/:id/generate-prompt', generateCategoryPrompt);
+router.post('/generate-prompt', generateCategoryPrompt);
 
 module.exports = router;

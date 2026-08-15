@@ -28,11 +28,6 @@ async function seed() {
     await Setting.create({ key: 'openaiApiKey', value: '' });
   }
 
-  const providersExist = await Setting.findOne({ key: 'aiProviders' });
-  if (!providersExist) {
-    await Setting.create({ key: 'aiProviders', value: [] });
-  }
-
   const toneExists = await Setting.findOne({ key: 'defaultTone' });
   if (!toneExists) {
     await Setting.create({ key: 'defaultTone', value: 'friendly' });
@@ -41,11 +36,6 @@ async function seed() {
   const langExists = await Setting.findOne({ key: 'defaultLanguage' });
   if (!langExists) {
     await Setting.create({ key: 'defaultLanguage', value: 'english' });
-  }
-
-  const promptExists = await Setting.findOne({ key: 'generalReviewPrompt' });
-  if (!promptExists) {
-    await Setting.create({ key: 'generalReviewPrompt', value: '' });
   }
 
   await ActivityLog.create({

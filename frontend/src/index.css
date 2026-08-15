@@ -2,13 +2,4 @@
 @tailwind components;
 @tailwind utilities;
 
-body { @apply bg-[#f7f9fd] text-[#17182d] min-h-screen; font-family: 'Urbanist', ui-sans-serif, system-ui, sans-serif; }
-
-button, input, select, textarea { font: inherit; }
-
-::selection { background: #ddd6fe; color: #312e81; }
-
-@layer components {
-  .input { @apply w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none; }
-  .hint { @apply text-xs text-gray-400 mt-1; }
-}
+body { @apply bg-gray-50 text-gray-900 min-h-screen; }
