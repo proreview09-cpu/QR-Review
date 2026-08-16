@@ -2,24 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
-const TONES = [
-  { value: 'professional', label: 'Professional' },
-  { value: 'friendly', label: 'Friendly' },
-  { value: 'casual', label: 'Casual' },
-  { value: 'enthusiastic', label: 'Enthusiastic' },
-  { value: 'grateful', label: 'Grateful' },
-  { value: 'humorous', label: 'Humorous' },
-];
-
-const LANGUAGES = [
-  { value: 'english', label: 'English' },
-  { value: 'gujarati', label: 'Gujarati' },
-  { value: 'hindi', label: 'Hindi' },
-];
-
 const blankForm = {
-  name: '', description: '', defaultPrompt: '', defaultTone: 'friendly',
-  defaultLanguage: 'english', isActive: true, reviewPoolMin: 50, reviewBatchSize: 50,
+  name: '', description: '',
 };
 
 export default function Categories() {
@@ -28,7 +12,6 @@ export default function Categories() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...blankForm });
   const [saving, setSaving] = useState(false);
-  const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const fileInputRef = useRef(null);
 
   const fetchCategories = () => {
@@ -53,11 +36,6 @@ export default function Categories() {
   const handleEdit = (category) => {
     setForm({
       name: category.name, description: category.description || '',
-      defaultPrompt: category.defaultPrompt || category.aiPrompt || '',
-      defaultTone: category.defaultTone || 'friendly',
-      defaultLanguage: category.defaultLanguage || 'english',
-      isActive: category.isActive, reviewPoolMin: category.reviewPoolMin || 50,
-      reviewBatchSize: category.reviewBatchSize || 50,
     });
     setEditing(category);
   };
@@ -71,7 +49,7 @@ export default function Categories() {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = { ...form, aiPrompt: form.defaultPrompt };
+      const payload = { ...form };
       if (editing) {
         await api.put(`/admin/categories/${editing._id}`, payload);
         toast.success('Category updated');
@@ -124,28 +102,6 @@ export default function Categories() {
     }
   };
 
-  const handleGeneratePrompt = async () => {
-    if (!form.name.trim()) {
-      toast.error('Please enter a category name first');
-      return;
-    }
-    setGeneratingPrompt(true);
-    try {
-      const { data } = await api.post('/admin/categories/generate-prompt', {
-        name: form.name,
-        description: form.description,
-        tone: form.defaultTone,
-        language: form.defaultLanguage,
-      });
-      setForm({ ...form, defaultPrompt: data.prompt });
-      toast.success('AI prompt generated');
-    } catch {
-      toast.error('Failed to generate prompt');
-    } finally {
-      setGeneratingPrompt(false);
-    }
-  };
-
   if (loading) {
     return <div className="flex h-64 items-center justify-center"><div className="h-9 w-9 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" /></div>;
   }
@@ -172,7 +128,7 @@ export default function Categories() {
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h3 className="text-lg font-extrabold">{editing ? `Edit: ${editing.name}` : 'Add new category'}</h3>
-              <p className="mt-1 text-xs text-slate-400">Defaults are applied when creating shops.</p>
+              <p className="mt-1 text-xs text-slate-400">Tone, language, and prompt are set per shop.</p>
             </div>
             {!editing && (
               <button onClick={handleAddNew} className="rounded-xl border border-[#e9edf5] px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">+ New</button>
@@ -190,57 +146,6 @@ export default function Categories() {
                 <input name="description" value={form.description} onChange={handleChange} className="input" placeholder="Brief description of this category" />
               </div>
             </div>
-
-            <details className="group rounded-xl border border-[#e9edf5] bg-[#f8f9fc]">
-              <summary className="cursor-pointer list-none px-4 py-3 text-sm font-bold text-slate-500 transition hover:text-indigo-600">
-                <span className="mr-1 inline-block transition-transform group-open:rotate-90">›</span> Advanced settings
-              </summary>
-              <div className="space-y-4 px-4 pb-4 pt-1">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-sm font-bold text-slate-600">Default tone</label>
-                    <select name="defaultTone" value={form.defaultTone} onChange={handleChange} className="input bg-white">
-                      {TONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-bold text-slate-600">Default language</label>
-                    <select name="defaultLanguage" value={form.defaultLanguage} onChange={handleChange} className="input bg-white">
-                      {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-bold text-slate-600">AI generated prompt</label>
-                  <textarea name="defaultPrompt" value={form.defaultPrompt} onChange={handleChange} rows={3} className="input resize-y" placeholder="Custom prompt for review generation. Use [SHOP_NAME] as placeholder." />
-                  <p className="hint">Use <code className="rounded bg-slate-100 px-1">[SHOP_NAME]</code> to reference the shop name dynamically. Leave empty to use the general prompt.</p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={handleGeneratePrompt} disabled={generatingPrompt || !form.name.trim()} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50">
-                    {generatingPrompt ? 'Generating...' : 'Generate with AI'}
-                  </button>
-                  <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
-                    <input type="checkbox" name="isActive" checked={form.isActive} onChange={handleChange} className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500" />
-                    Active
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-sm font-bold text-slate-600">Review pool size</label>
-                    <input type="number" name="reviewPoolMin" value={form.reviewPoolMin} onChange={handleChange} min="10" className="input" />
-                    <p className="hint">Min reviews always available in queue.</p>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-bold text-slate-600">Generate batch size</label>
-                    <input type="number" name="reviewBatchSize" value={form.reviewBatchSize} onChange={handleChange} min="10" className="input" />
-                    <p className="hint">Reviews per generation batch.</p>
-                  </div>
-                </div>
-              </div>
-            </details>
 
             <div className="flex gap-3 pt-2">
               <button type="submit" disabled={saving} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50">
