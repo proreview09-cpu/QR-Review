@@ -182,6 +182,37 @@ export default function Dashboard() {
           )}
         </section>
 
+        <section className="mt-6 rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.045)]">
+          <div className="mb-5 flex items-center justify-between">
+            <div><h2 className="text-lg font-extrabold">Submitted customer details</h2><p className="mt-1 text-xs text-slate-400">Full details customers filled before copying a review</p></div>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-50 text-sm font-extrabold text-indigo-600">D</span>
+          </div>
+          {activity.filter((r) => r.customerDetails && Object.keys(r.customerDetails).length > 0).length === 0 ? (
+            <p className="rounded-xl bg-[#f8f9fc] p-4 text-sm text-slate-400">No submissions yet. Customers appear here after they copy a review on your review page.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {activity
+                .filter((r) => r.customerDetails && Object.keys(r.customerDetails).length > 0)
+                .map((r) => (
+                  <div key={r._id} className="rounded-xl border border-[#e9edf5] bg-white p-4">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <span className="text-xs text-slate-400">{new Date(r.usedAt).toLocaleString()}</span>
+                      <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${r.isPosted ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{r.isPosted ? 'Posted' : 'Pending'}</span>
+                    </div>
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {Object.entries(r.customerDetails).map(([key, value]) => (
+                        <span key={key} className="rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700">
+                          {fieldLabels[key] || key}: {value}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-sm leading-relaxed text-slate-600">{r.content}</p>
+                  </div>
+                ))}
+            </div>
+          )}
+        </section>
+
         {shop.canOwnerSetTone && (
           <section className="mt-6 rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.045)]">
             <div className="mb-5"><h2 className="text-lg font-extrabold">Review preferences</h2><p className="mt-1 text-xs text-slate-400">Your administrator has allowed you to customize these settings.</p></div>
