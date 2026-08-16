@@ -289,11 +289,14 @@ async function checkAIProviders() {
   return providers.length;
 }
 
-function generatePrompt(shopName, businessName, tone, count, language, generalPrompt, customPrompt, promptMode) {
+function generatePrompt(shopName, businessName, tone, count, language, generalPrompt, customPrompt, promptMode, excludeTexts = []) {
   const toneDesc = REVIEW_TONES[tone] || 'friendly';
   const langName = LANGUAGES[language] || 'English';
   const specificInstructions = resolvePrompt(generalPrompt, customPrompt, promptMode);
-  return `You are a real customer who just visited "${shopName}". Write ${count} short Google reviews in ${langName}.
+  const exclusionBlock = excludeTexts.length
+    ? `\nEXISTING REVIEWS TO AVOID (write completely new reviews - do NOT repeat or closely resemble any of these):\n${excludeTexts.slice(0, 15).map((t) => `- ${String(t).slice(0, 90)}`).join('\n')}\n`
+    : '';
+  return `You are a real customer who just visited "${shopName}". Write ${count} short Google reviews in ${langName}.${exclusionBlock}
 
 BUSINESS-SPECIFIC INSTRUCTIONS:
 ${specificInstructions || 'Use only the business details and tone provided below.'}
@@ -318,10 +321,27 @@ const withTimeout = (promise, ms) => Promise.race([
   new Promise((_, reject) => setTimeout(() => reject(new Error('Provider request timed out')), ms)),
 ]);
 
-async function generateReviews(shopName, businessName, tone, count = 10, language = 'english', shopId = null, customPrompt = '', promptMode = 'override', promptContext = {}) {
+const TRANSIENT_RE = /high demand|try again later|overloaded|rate limit|temporarily unavailable|429|503/i;
+
+async function requestWithRetry(provider, prompt) {
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await withTimeout(requestProvider(provider, prompt), 45000);
+    } catch (err) {
+      lastErr = err;
+      if (!TRANSIENT_RE.test(err.message)) throw err;
+      console.error(`${provider.provider} attempt ${attempt} transient failure, retrying:`, err.message);
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 1200 * attempt));
+    }
+  }
+  throw lastErr;
+}
+
+async function generateReviews(shopName, businessName, tone, count = 10, language = 'english', shopId = null, customPrompt = '', promptMode = 'override', promptContext = {}, excludeTexts = []) {
   const providers = await getAIProviders();
   if (!providers.length) {
-    return generateMockReviews(count, language, shopName);
+    return generateMockReviews(count, language, shopName, excludeTexts);
   }
 
   const generalPrompt = await getGeneralPrompt();
@@ -336,11 +356,11 @@ async function generateReviews(shopName, businessName, tone, count = 10, languag
 const shopPrompt = String(customPrompt || '').replace(/\[SHOP_NAME\]/g, shopName);
   const resolvedGeneralPrompt = replacePromptVariables(generalPrompt, variables);
   const resolvedCustomPrompt = replacePromptVariables(shopPrompt, variables);
-  const prompt = generatePrompt(shopName, businessName, tone, count, language, resolvedGeneralPrompt, resolvedCustomPrompt, promptMode);
+  const prompt = generatePrompt(shopName, businessName, tone, count, language, resolvedGeneralPrompt, resolvedCustomPrompt, promptMode, excludeTexts);
 
   for (const provider of providers) {
     try {
-      const result = await withTimeout(requestProvider(provider, prompt), 45000);
+      const result = await requestWithRetry(provider, prompt);
       const reviews = parseReviews(result.text);
       recordTokenUsage(shopId, provider.provider, result.model, result.usage, count, true);
       updateProviderStatus(provider.provider, 'active', '', { selectedModel: result.model });
@@ -354,10 +374,10 @@ const shopPrompt = String(customPrompt || '').replace(/\[SHOP_NAME\]/g, shopName
   }
 
   console.error('All configured AI providers failed, using mock reviews');
-  return generateMockReviews(count, language, shopName);
+  return generateMockReviews(count, language, shopName, excludeTexts);
 }
 
-function generateMockReviews(count, language = 'english', shopName = 'this business') {
+function generateMockReviews(count, language = 'english', shopName = 'this business', excludeTexts = []) {
   const pools = {
     english: [
       "honestly this shop is a lifesaver. staff is super chill and they actually know what they're doing. prices won't break your bank either",
@@ -419,8 +439,10 @@ function generateMockReviews(count, language = 'english', shopName = 'this busin
       ? `${shopName} में अनुभव अच्छा रहा।`
       : `Had a good experience at ${shopName}.`;
   const languageSuffixes = suffixes[language] || suffixes.english;
+  const excludedSet = new Set(excludeTexts.map((t) => String(t).toLowerCase().trim()));
   let result = [];
-  let pool = [...mockReviews];
+  let pool = [...mockReviews].filter((m) => !excludedSet.has(m.toLowerCase().trim()));
+  if (!pool.length) pool = [...mockReviews];
   for (let i = 0; i < count; i++) {
     if (pool.length === 0) pool = [...mockReviews];
     const idx = Math.floor(Math.random() * pool.length);
@@ -432,4 +454,39 @@ function generateMockReviews(count, language = 'english', shopName = 'this busin
   return result;
 }
 
-module.exports = { generateReviews, checkAIProviders };
+async function generateBusinessPrompt({ name, description, shopName, businessName, tone, language }) {
+  const providers = await getAIProviders();
+  const targetName = shopName || name;
+  const langName = LANGUAGES[language] || 'English';
+  const metaPrompt = `You are a prompt engineer for a Google review generation app. Write a detailed prompt that will be used to generate authentic Google reviews for "${targetName}"${shopName && businessName && businessName !== targetName ? ` (business name: ${businessName})` : ''}.
+
+Business type: ${description || name || 'general business'}
+Tone: ${tone || 'friendly'}
+Language: ${langName}
+
+The prompt must instruct an AI to write short, authentic, human-sounding Google reviews that:
+- mention the shop name naturally
+- are 3 lines max, usually 20-35 words
+- are unique and varied in structure, no repeated phrases
+- avoid hashtags, emojis, greetings, sign-offs, generic phrases
+- never invent specific facts, offers, or experiences
+
+Write the prompt in a direct, conversational style with clear bullet instructions, opening with a realistic customer scenario. Return ONLY the prompt text itself, no quotes, no explanation.`;
+
+  for (const provider of providers) {
+    try {
+      const result = await requestWithRetry(provider, metaPrompt);
+      const text = String(result.text || '').trim().replace(/^["']|["']$/g, '');
+      if (text) {
+        updateProviderStatus(provider.provider, 'active', '', { selectedModel: result.model });
+        return text;
+      }
+    } catch (err) {
+      updateProviderStatus(provider.provider, 'failed', err.message, {});
+      console.error(`${provider.provider} failed for prompt generation, trying next provider:`, err.message);
+    }
+  }
+  return null;
+}
+
+module.exports = { generateReviews, checkAIProviders, generateBusinessPrompt };

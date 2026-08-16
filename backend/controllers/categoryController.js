@@ -1,6 +1,7 @@
 const Category = require('../models/Category');
 const xlsx = require('xlsx');
 const { log } = require('../services/logService');
+const { generateBusinessPrompt } = require('../services/openaiService');
 
 const REVIEW_TONES = {
   professional: 'formal and business-like',
@@ -285,6 +286,11 @@ exports.generatePrompt = async (req, res) => {
       return res.status(400).json({ message: 'Category name or shop name is required' });
     }
 
+    const aiPrompt = await generateBusinessPrompt({ name, description, shopName, businessName, tone, language });
+    if (aiPrompt) {
+      return res.json({ prompt: aiPrompt, generatedByAI: true });
+    }
+
     const lines = [
       `You are a real customer who just visited "${targetName}"${shopName && targetBusiness && targetBusiness !== targetName ? ` (${targetBusiness})` : ''}.`,
       `Write short Google reviews in ${langName}.`,
@@ -321,7 +327,7 @@ exports.generatePrompt = async (req, res) => {
       'Return ONLY JSON array: ["review1","review2",...]'
     );
 
-    res.json({ prompt: lines.join('\n') });
+    res.json({ prompt: lines.join('\n'), generatedByAI: false });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

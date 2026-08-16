@@ -59,11 +59,12 @@ exports.copyReview = async (req, res) => {
     log('COPY', 'review', `Review copied for "${shop.shopName}"`, { shop: shop._id, ip: req.ip });
 
     if (unusedCount < shop.reviewPoolMin) {
+      const existing = await Review.find({ shop: shop._id }).select('content').lean();
       generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 10, shop.language, shop._id, shop.aiPrompt || '', 'override', {
         ownerName: shop.ownerName,
         address: shop.address,
         phone: shop.phone,
-      })
+      }, existing.map((r) => r.content))
         .then(async (reviews) => {
           await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
         })
@@ -89,11 +90,12 @@ exports.generateMore = async (req, res) => {
     const needed = Math.max(0, shop.reviewPoolMin - unusedCount);
 
     if (needed > 0) {
+      const existing = await Review.find({ shop: shop._id }).select('content').lean();
       const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, needed, shop.language, shop._id, shop.aiPrompt || '', 'override', {
         ownerName: shop.ownerName,
         address: shop.address,
         phone: shop.phone,
-      });
+      }, existing.map((r) => r.content));
       await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
       return res.json({ message: `Generated ${needed} new reviews`, generated: needed });
     }

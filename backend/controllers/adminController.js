@@ -222,13 +222,15 @@ exports.updateShop = async (req, res) => {
     }
 
     if (req.body.shopName || req.body.businessName || req.body.reviewTone || req.body.language || req.body.aiPrompt !== undefined || req.body.category !== undefined) {
+      const oldReviews = await Review.find({ shop: shop._id }).select('content').lean();
+      const excludeTexts = oldReviews.map((r) => r.content);
       await Review.deleteMany({ shop: shop._id, isUsed: false });
       try {
         const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 50, shop.language, shop._id, shop.aiPrompt, 'override', {
           ownerName: shop.ownerName,
           address: shop.address,
           phone: shop.phone,
-        });
+        }, excludeTexts);
         await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
       } catch (genErr) {
         console.error('Review regeneration failed:', genErr.message);
@@ -247,6 +249,8 @@ exports.regenerateReviews = async (req, res) => {
     const shop = await Shop.findById(req.params.id);
     if (!shop) return res.status(404).json({ message: 'Shop not found' });
 
+    const oldReviews = await Review.find({ shop: shop._id }).select('content').lean();
+    const excludeTexts = oldReviews.map((r) => r.content);
     await Review.deleteMany({ shop: shop._id, isUsed: false });
     const count = shop.reviewBatchSize || shop.reviewPoolMin || 50;
     const reviews = await generateReviews(
@@ -259,6 +263,7 @@ exports.regenerateReviews = async (req, res) => {
       shop.aiPrompt,
       'override',
       { ownerName: shop.ownerName, address: shop.address, phone: shop.phone },
+      excludeTexts,
     );
     await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
 
