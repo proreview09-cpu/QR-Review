@@ -11,7 +11,6 @@ import AdminSettings from './pages/admin/Settings';
 import AdminAIProviders from './pages/admin/AIProviders';
 import AdminLogs from './pages/admin/Logs';
 import ShopOwnerDashboard from './pages/shopowner/Dashboard';
-import OwnerQRCode from './pages/shopowner/QRCode';
 import ReviewPage from './pages/customer/ReviewPage';
 
 function ProtectedRoute({ children, role }) {
@@ -46,7 +45,6 @@ export default function App() {
       <Route path="/admin/logs" element={<Layout><ProtectedRoute role="admin"><AdminLogs /></ProtectedRoute></Layout>} />
 
       <Route path="/dashboard" element={<ProtectedRoute role="shop_owner"><ShopOwnerDashboard /></ProtectedRoute>} />
-      <Route path="/qr" element={<ProtectedRoute role="shop_owner"><OwnerQRCode /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/login" />} />
     </Routes>

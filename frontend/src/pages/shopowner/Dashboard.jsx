@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
@@ -88,7 +88,6 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           {isAdminPreview && <span className="hidden rounded-full bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-700 sm:inline-flex">Admin preview</span>}
-          <Link to="/qr" className="hidden rounded-xl border border-[#e7eaf2] px-3 py-2 text-xs font-bold text-indigo-600 transition hover:bg-indigo-50 sm:inline-flex">QR code</Link>
           <span className="hidden text-right sm:block"><strong className="block text-sm font-bold">{user?.name}</strong><small className="text-xs text-slate-400">Business owner</small></span>
           <span className="grid h-10 w-10 place-items-center rounded-full bg-indigo-100 text-xs font-extrabold text-indigo-700">{user?.name?.slice(0, 2).toUpperCase()}</span>
           <button onClick={isAdminPreview ? exitAdminPreview : () => { logout(); navigate('/login'); }} className="ml-1 rounded-xl border border-[#e7eaf2] px-3 py-2 text-xs font-bold text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600">{isAdminPreview ? 'Exit preview' : 'Logout'}</button>
