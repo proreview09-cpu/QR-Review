@@ -233,6 +233,8 @@ export default function ShopDetail() {
   const reviewLink = `${window.location.origin}/review/${shop._id}`;
   const reviewsGenerated = tokenUsage?.reviewsGenerated || 0;
   const detailsStats = customerDetailsStats || { totalFilled: 0, byField: {} };
+  const fieldLabels = {};
+  (shop.customerFields || []).forEach((field) => { fieldLabels[field.key] = field.label; });
 
   return (
     <div className="mx-auto max-w-[1180px]">
@@ -510,7 +512,7 @@ export default function ShopDetail() {
                   {reviewHistory.map((r) => {
                     const details = r.customerDetails || {};
                     const detailText = Object.entries(details)
-                      .map(([key, value]) => `${(CUSTOMER_FIELDS.find((f) => f.key === key)?.label || key)}: ${value}`)
+                      .map(([key, value]) => `${fieldLabels[key] || key}: ${value}`)
                       .join(' · ');
                     return (
                       <tr key={r._id} className="hover:bg-slate-50">

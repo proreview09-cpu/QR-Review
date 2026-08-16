@@ -19,11 +19,6 @@ const LANGUAGES = [
   { value: 'hindi', label: 'Hindi' },
 ];
 
-const CUSTOMER_FIELD_LABELS = {
-  name: 'Full name', phone: 'Phone number', email: 'Email', city: 'City',
-  orderNo: 'Order / receipt number', vehicleNo: 'Vehicle number', note: 'Note / feedback',
-};
-
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -65,8 +60,8 @@ export default function Dashboard() {
       toast.success('Settings updated');
       const { data: fresh } = await api.get('/shop/my-shop');
       setData(fresh);
-    } catch {
-      toast.error('Failed to update settings');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update settings');
     } finally {
       setSaving(false);
     }
@@ -78,6 +73,8 @@ export default function Dashboard() {
   const { shop, stats } = data;
   const tone = TONES.find((item) => item.value === shop.reviewTone)?.label || shop.reviewTone;
   const language = LANGUAGES.find((item) => item.value === shop.language)?.label || shop.language || 'English';
+  const fieldLabels = {};
+  (shop.customerFields || []).forEach((field) => { fieldLabels[field.key] = field.label; });
 
   return (
     <div className="min-h-screen bg-[#f7f9fd] text-[#17182d]">
@@ -164,7 +161,7 @@ export default function Dashboard() {
                   {activity.map((r) => {
                     const details = r.customerDetails || {};
                     const detailText = Object.entries(details)
-                      .map(([key, value]) => `${CUSTOMER_FIELD_LABELS[key] || key}: ${value}`)
+                      .map(([key, value]) => `${fieldLabels[key] || key}: ${value}`)
                       .join(' · ');
                     return (
                       <tr key={r._id} className="hover:bg-slate-50">
