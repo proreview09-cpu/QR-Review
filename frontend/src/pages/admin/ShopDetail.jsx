@@ -229,9 +229,10 @@ export default function ShopDetail() {
   }
   if (!data) return <p className="text-center text-red-500">Shop not found.</p>;
 
-  const { shop, stats, tokenUsage } = data;
+  const { shop, stats, tokenUsage, customerDetailsStats } = data;
   const reviewLink = `${window.location.origin}/review/${shop._id}`;
   const reviewsGenerated = tokenUsage?.reviewsGenerated || 0;
+  const detailsStats = customerDetailsStats || { totalFilled: 0, byField: {} };
 
   return (
     <div className="mx-auto max-w-[1180px]">
@@ -259,6 +260,11 @@ export default function ShopDetail() {
         <StatCard label="API calls" value={tokenUsage?.totalCalls || 0} tone="blue" />
         <StatCard label="Tokens used" value={tokenUsage?.totalTokens?.toLocaleString() || 0} tone="pink" />
         <StatCard label="Valid until" value={shop.expiresAt ? new Date(shop.expiresAt).toLocaleDateString() : 'Unlimited'} tone={shop.expiresAt && new Date(shop.expiresAt) <= new Date() ? 'red' : 'slate'} />
+      </div>
+
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+        <StatCard label="Details filled" value={detailsStats.totalFilled} tone="cyan" />
+        <StatCard label="Details pending" value={(stats.usedReviews || 0) - detailsStats.totalFilled} tone="orange" />
       </div>
 
       <section className="mb-6 rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
@@ -402,7 +408,7 @@ export default function ShopDetail() {
 
       <section className="mb-6 rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
         <h3 className="mb-1 text-lg font-extrabold">Customer details form</h3>
-        <p className="mb-4 text-sm text-slate-500">Enable fields customers must fill before copying a review. Values appear in the activity table below.</p>
+        <p className="mb-4 text-sm text-slate-500">Enable fields customers must fill before copying a review. Values appear in the activity table below. <span className="font-bold text-indigo-600">{detailsStats.totalFilled} customers filled details</span></p>
         <fieldset disabled={readOnly} className="contents">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {CUSTOMER_FIELDS.map((field) => {
@@ -442,6 +448,9 @@ export default function ShopDetail() {
                           }}
                           className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
                         />
+                        {detailsStats.byField[field.key] > 0 && (
+                          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-700">{detailsStats.byField[field.key]} filled</span>
+                        )}
                       </>
                     )}
                   </div>
@@ -550,7 +559,7 @@ function StatCard({ label, value, tone }) {
     orange: 'bg-orange-50 text-orange-700', violet: 'bg-violet-50 text-violet-700',
     teal: 'bg-teal-50 text-teal-700', blue: 'bg-blue-50 text-blue-700',
     pink: 'bg-pink-50 text-pink-700', slate: 'bg-slate-100 text-slate-700',
-    red: 'bg-red-50 text-red-700',
+    red: 'bg-red-50 text-red-700', cyan: 'bg-cyan-50 text-cyan-700',
   };
   return (
     <div className={`rounded-2xl border border-[#e9edf5] p-5 shadow-[0_8px_28px_rgba(41,45,54,0.045)] ${tones[tone] || tones.slate}`}>

@@ -356,6 +356,22 @@ exports.getShop = async (req, res) => {
       { $group: { _id: null, totalTokens: { $sum: '$totalTokens' }, totalCalls: { $sum: 1 }, promptTokens: { $sum: '$promptTokens' }, completionTokens: { $sum: '$completionTokens' }, reviewsGenerated: { $sum: '$reviewsGenerated' } } },
     ]);
 
+    const detailStats = await Review.aggregate([
+      { $match: { shop: shop._id, isUsed: true, customerDetails: { $exists: true, $ne: {} } } },
+      {
+        $facet: {
+          total: [{ $count: 'n' }],
+          byField: [
+            { $project: { keys: { $objectToArray: '$customerDetails' } } },
+            { $unwind: '$keys' },
+            { $group: { _id: '$keys.k', count: { $sum: 1 } } },
+          ],
+        },
+      },
+    ]);
+    const byField = {};
+    (detailStats[0]?.byField || []).forEach((item) => { byField[item._id] = item.count; });
+
     // Generate QR using request domain (auto-detects deployed URL)
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:5175';
@@ -374,6 +390,10 @@ exports.getShop = async (req, res) => {
         availableReviews: (reviewStats[0]?.total || 0) - (reviewStats[0]?.used || 0),
       },
       tokenUsage: tokenStats[0] || { totalTokens: 0, totalCalls: 0, promptTokens: 0, completionTokens: 0, reviewsGenerated: 0 },
+      customerDetailsStats: {
+        totalFilled: detailStats[0]?.total[0]?.n || 0,
+        byField,
+      },
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
