@@ -29,14 +29,25 @@ export default function Dashboard() {
   const [editLanguage, setEditLanguage] = useState('');
   const [isAdminPreview, setIsAdminPreview] = useState(false);
   const [activity, setActivity] = useState([]);
+  const [shops, setShops] = useState([]);
+  const [selectedShopId, setSelectedShopId] = useState('');
 
-  useEffect(() => {
-    api.get('/shop/my-shop').then(({ data: result }) => {
+  const fetchDashboard = (shopId) => {
+    const qs = shopId ? `?shop=${shopId}` : '';
+    api.get(`/shop/my-shop${qs}`).then(({ data: result }) => {
       setData(result);
+      setShops(result.shops || []);
+      if (result.shops?.length > 1 && !shopId) {
+        setSelectedShopId(result.shop._id);
+      }
       setEditTone(result.shop.reviewTone);
       setEditLanguage(result.shop.language || 'english');
     }).catch(console.error).finally(() => setLoading(false));
-    api.get('/shop/reviews').then(({ data: result }) => setActivity(result.reviews)).catch(() => {});
+    api.get(`/shop/reviews${qs}`).then(({ data: result }) => setActivity(result.reviews)).catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchDashboard('');
   }, []);
 
   useEffect(() => {
@@ -56,10 +67,9 @@ export default function Dashboard() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.put('/shop/my-shop', { reviewTone: editTone, language: editLanguage });
+      await api.put(`/shop/my-shop?shop=${selectedShopId}`, { reviewTone: editTone, language: editLanguage });
       toast.success('Settings updated');
-      const { data: fresh } = await api.get('/shop/my-shop');
-      setData(fresh);
+      fetchDashboard(selectedShopId);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to update settings');
     } finally {
@@ -98,7 +108,24 @@ export default function Dashboard() {
             <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">{shop.businessName}</h1>
             <p className="mt-2 text-sm text-slate-500">Here is how your customer feedback is performing.</p>
           </div>
-          <span className={`w-fit rounded-full px-3 py-1.5 text-xs font-bold ${shop.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{shop.isActive ? 'Active business' : 'Inactive business'}</span>
+          <div className="flex items-center gap-3">
+            {shops.length > 1 && (
+              <select
+                value={selectedShopId}
+                onChange={(e) => {
+                  setSelectedShopId(e.target.value);
+                  setLoading(true);
+                  fetchDashboard(e.target.value);
+                }}
+                className="input w-56 bg-white"
+              >
+                {shops.map((item) => (
+                  <option key={item._id} value={item._id}>{item.shopName}</option>
+                ))}
+              </select>
+            )}
+            <span className={`w-fit rounded-full px-3 py-1.5 text-xs font-bold ${shop.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{shop.isActive ? 'Active business' : 'Inactive business'}</span>
+          </div>
         </section>
 
         <section className="grid grid-cols-1 gap-4 md:grid-cols-[1.5fr_1fr]">

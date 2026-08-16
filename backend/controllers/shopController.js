@@ -3,10 +3,20 @@ const Review = require('../models/Review');
 const TokenUsage = require('../models/TokenUsage');
 const { generateReviews } = require('../services/openaiService');
 
+function resolveSelectedShop(shops, requestedId) {
+  if (requestedId && shops.some((shop) => shop._id.toString() === requestedId)) {
+    return shops.find((shop) => shop._id.toString() === requestedId)._id;
+  }
+  return shops[0]._id;
+}
+
 exports.getMyShop = async (req, res) => {
   try {
-    const shop = await Shop.findOne({ owner: req.user._id }).populate('category', 'name defaultTone defaultLanguage defaultPrompt');
-    if (!shop) return res.status(404).json({ message: 'No shop found' });
+    const shops = await Shop.find({ owner: req.user._id }).select('_id shopName businessName isActive').sort({ createdAt: 1 }).lean();
+    if (!shops.length) return res.status(404).json({ message: 'No shop found' });
+
+    const selectedId = resolveSelectedShop(shops, req.query.shop);
+    const shop = await Shop.findById(selectedId).populate('category', 'name defaultTone defaultLanguage defaultPrompt');
 
     const reviewStats = await Review.aggregate([
       { $match: { shop: shop._id } },
@@ -23,6 +33,7 @@ exports.getMyShop = async (req, res) => {
     const frontendUrl = `${protocol}://${host}`;
     res.json({
       shop,
+      shops,
       reviewLink: `${frontendUrl}/review/${shop._id}`,
       stats: {
         totalReviews: reviewStats[0]?.total || 0,
@@ -41,8 +52,11 @@ exports.getMyShop = async (req, res) => {
 
 exports.updateMyShop = async (req, res) => {
   try {
-    const shop = await Shop.findOne({ owner: req.user._id });
-    if (!shop) return res.status(404).json({ message: 'No shop found' });
+    const shops = await Shop.find({ owner: req.user._id }).select('_id').sort({ createdAt: 1 }).lean();
+    if (!shops.length) return res.status(404).json({ message: 'No shop found' });
+
+    const selectedId = resolveSelectedShop(shops, req.query.shop);
+    const shop = await Shop.findById(selectedId);
     if (!shop.canOwnerSetTone) return res.status(403).json({ message: 'Admin has disabled this feature' });
 
     const { reviewTone, language } = req.body;
@@ -72,10 +86,12 @@ exports.updateMyShop = async (req, res) => {
 
 exports.getMyShopReviews = async (req, res) => {
   try {
-    const shop = await Shop.findOne({ owner: req.user._id });
-    if (!shop) return res.status(404).json({ message: 'No shop found' });
+    const shops = await Shop.find({ owner: req.user._id }).select('_id').sort({ createdAt: 1 }).lean();
+    if (!shops.length) return res.status(404).json({ message: 'No shop found' });
 
-    const reviews = await Review.find({ shop: shop._id, isUsed: true })
+    const selectedId = resolveSelectedShop(shops, req.query.shop);
+
+    const reviews = await Review.find({ shop: selectedId, isUsed: true })
       .sort({ usedAt: -1 })
       .limit(20)
       .select('content isUsed usedAt isPosted postedAt customerDetails');
@@ -88,8 +104,11 @@ exports.getMyShopReviews = async (req, res) => {
 
 exports.getShopStats = async (req, res) => {
   try {
-    const shop = await Shop.findOne({ owner: req.user._id }).populate('category', 'name defaultTone defaultLanguage defaultPrompt');
-    if (!shop) return res.status(404).json({ message: 'No shop found' });
+    const shops = await Shop.find({ owner: req.user._id }).select('_id').sort({ createdAt: 1 }).lean();
+    if (!shops.length) return res.status(404).json({ message: 'No shop found' });
+
+    const selectedId = resolveSelectedShop(shops, req.query.shop);
+    const shop = await Shop.findById(selectedId).populate('category', 'name defaultTone defaultLanguage defaultPrompt');
 
     const reviewStats = await Review.aggregate([
       { $match: { shop: shop._id } },
