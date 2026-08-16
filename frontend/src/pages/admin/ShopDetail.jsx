@@ -465,6 +465,35 @@ export default function ShopDetail() {
       </section>
 
       <section className="mb-6 rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
+        <h3 className="mb-1 text-lg font-extrabold">Submitted customer details ({detailsStats.totalFilled})</h3>
+        <p className="mb-4 text-sm text-slate-500">Every customer entry with the details they filled. Newest first.</p>
+        {reviewHistory.filter((r) => r.customerDetails && Object.keys(r.customerDetails).length > 0).length === 0 ? (
+          <p className="rounded-xl bg-[#f8f9fc] p-4 text-sm text-slate-400">No submissions yet. Customers will appear here after they copy a review on the review page.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {reviewHistory
+              .filter((r) => r.customerDetails && Object.keys(r.customerDetails).length > 0)
+              .map((r) => (
+                <div key={r._id} className="rounded-xl border border-[#e9edf5] bg-white p-4">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-400">{new Date(r.usedAt).toLocaleString()}</span>
+                    <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${r.isPosted ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{r.isPosted ? 'Posted' : 'Pending'}</span>
+                  </div>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {Object.entries(r.customerDetails).map(([key, value]) => (
+                      <span key={key} className="rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700">
+                        {fieldLabels[key] || key}: {value}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-sm leading-relaxed text-slate-600">{r.content}</p>
+                </div>
+              ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
         <h3 className="mb-1 text-lg font-extrabold">Owner account</h3>
         <p className="mb-4 text-sm text-slate-500"><span className="font-bold">{shop.owner?.name}</span> &middot; {shop.owner?.email} &middot; created {new Date(shop.createdAt).toLocaleDateString()}</p>
         <div className="rounded-xl bg-[#f8f9fc] p-4">
