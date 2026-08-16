@@ -73,6 +73,22 @@ exports.updateMyShop = async (req, res) => {
   }
 };
 
+exports.getMyShopReviews = async (req, res) => {
+  try {
+    const shop = await Shop.findOne({ owner: req.user._id });
+    if (!shop) return res.status(404).json({ message: 'No shop found' });
+
+    const reviews = await Review.find({ shop: shop._id, isUsed: true })
+      .sort({ usedAt: -1 })
+      .limit(20)
+      .select('content isUsed usedAt isPosted postedAt customerDetails');
+
+    res.json({ reviews });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.getShopStats = async (req, res) => {
   try {
     const shop = await Shop.findOne({ owner: req.user._id }).populate('category', 'name defaultTone defaultLanguage defaultPrompt');

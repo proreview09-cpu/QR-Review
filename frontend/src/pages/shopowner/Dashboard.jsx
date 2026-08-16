@@ -19,6 +19,11 @@ const LANGUAGES = [
   { value: 'hindi', label: 'Hindi' },
 ];
 
+const CUSTOMER_FIELD_LABELS = {
+  name: 'Full name', phone: 'Phone number', email: 'Email', city: 'City',
+  orderNo: 'Order / receipt number', vehicleNo: 'Vehicle number', note: 'Note / feedback',
+};
+
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -28,6 +33,7 @@ export default function Dashboard() {
   const [editTone, setEditTone] = useState('');
   const [editLanguage, setEditLanguage] = useState('');
   const [isAdminPreview, setIsAdminPreview] = useState(false);
+  const [activity, setActivity] = useState([]);
 
   useEffect(() => {
     api.get('/shop/my-shop').then(({ data: result }) => {
@@ -35,6 +41,7 @@ export default function Dashboard() {
       setEditTone(result.shop.reviewTone);
       setEditLanguage(result.shop.language || 'english');
     }).catch(console.error).finally(() => setLoading(false));
+    api.get('/shop/reviews').then(({ data: result }) => setActivity(result.reviews)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -134,6 +141,49 @@ export default function Dashboard() {
             <InfoItem label="Review tone" value={tone} />
             <InfoItem label="Review language" value={language} />
           </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.045)]">
+          <div className="mb-5 flex items-center justify-between">
+            <div><h2 className="text-lg font-extrabold">Customer activity</h2><p className="mt-1 text-xs text-slate-400">Latest customers who copied a review, with their details</p></div>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-50 text-sm font-extrabold text-indigo-600">C</span>
+          </div>
+          {activity.length === 0 ? (
+            <p className="rounded-xl bg-[#f8f9fc] p-4 text-sm text-slate-400">No customer activity yet. Share your QR code to get started.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    <th className="px-3 py-3">Review</th>
+                    <th className="px-3 py-3">Customer</th>
+                    <th className="px-3 py-3">Copied at</th>
+                    <th className="px-3 py-3 text-center">Posted</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {activity.map((r) => {
+                    const details = r.customerDetails || {};
+                    const detailText = Object.entries(details)
+                      .map(([key, value]) => `${CUSTOMER_FIELD_LABELS[key] || key}: ${value}`)
+                      .join(' · ');
+                    return (
+                      <tr key={r._id} className="hover:bg-slate-50">
+                        <td className="max-w-xs truncate px-3 py-4">{r.content}</td>
+                        <td className="max-w-[160px] px-3 py-4">
+                          {detailText ? <span className="block max-w-[160px] truncate text-xs text-slate-600" title={detailText}>{detailText}</span> : <span className="text-xs text-slate-300">-</span>}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-slate-500">{new Date(r.usedAt).toLocaleString()}</td>
+                        <td className="px-3 py-4 text-center">
+                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${r.isPosted ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{r.isPosted ? 'Posted' : 'Pending'}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         {shop.canOwnerSetTone && (
