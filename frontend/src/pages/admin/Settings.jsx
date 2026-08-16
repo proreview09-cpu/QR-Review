@@ -21,6 +21,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState(null);
+  const [generatingGeneral, setGeneratingGeneral] = useState(false);
 
   useEffect(() => {
     api.get('/admin/settings').then(({ data }) => {
@@ -75,6 +76,19 @@ export default function Settings() {
       toast.error('Failed to check AI providers');
     } finally {
       setChecking(false);
+    }
+  };
+
+  const handleGenerateGeneral = async () => {
+    setGeneratingGeneral(true);
+    try {
+      const { data } = await api.post('/admin/settings/generate-general-prompt');
+      setGeneralReviewPrompt(data.prompt);
+      toast.success('General prompt generated with AI');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to generate prompt');
+    } finally {
+      setGeneratingGeneral(false);
     }
   };
 
@@ -180,7 +194,17 @@ export default function Settings() {
         </section>
 
         <section className="rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
-          <label className="mb-1 block text-sm font-bold text-slate-600">General review prompt</label>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="block text-sm font-bold text-slate-600">General review prompt</label>
+            <button
+              type="button"
+              onClick={handleGenerateGeneral}
+              disabled={generatingGeneral}
+              className="rounded-xl bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-50"
+            >
+              {generatingGeneral ? 'Generating...' : 'Generate with AI'}
+            </button>
+          </div>
           <textarea value={generalReviewPrompt} onChange={(e) => setGeneralReviewPrompt(e.target.value)} rows={6} className="input resize-y" placeholder="Write general instructions for every shop. Example: Mention fresh products, quick service, and helpful staff." />
           <p className="hint">Used by every shop. With prompt mode "Merge" (default), this prompt and the shop's own prompt are both sent to the AI. With "Only shop prompt", this is ignored for shops that have their own prompt.</p>
           <PromptVariables onInsert={insertPromptVariable} />

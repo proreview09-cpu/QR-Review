@@ -467,6 +467,7 @@ Language: ${langName}
 The prompt must instruct an AI to write short, authentic, human-sounding Google reviews that:
 - read like a real customer typed them on their phone - natural, casual, genuine
 - mention the shop name naturally
+- ALWAYS use the exact placeholder [SHOP_NAME] (brackets included, uppercase) when referring to the shop name - never write an example name
 - are 3 lines max, usually 20-35 words
 - are unique and varied in structure, no repeated phrases
 - avoid hashtags, emojis, greetings, sign-offs, generic marketing phrases
@@ -491,4 +492,36 @@ Write the prompt in a direct, conversational style with clear bullet instruction
   return null;
 }
 
-module.exports = { generateReviews, checkAIProviders, generateBusinessPrompt };
+async function generateGeneralPrompt() {
+  const providers = await getAIProviders();
+  const metaPrompt = `You are a prompt engineer for a Google review generation app. Write a general review-generation prompt that works well for ANY business - restaurants, shops, clinics, salons, garages, services.
+
+The general prompt must instruct an AI to write short, authentic, human-sounding Google reviews that:
+- sound like a real happy customer typing on their phone - natural, warm, a bit casual, genuine
+- feel personal and heartfelt, so reading them makes the business owner smile
+- mention the business name naturally once, early in the review
+- ALWAYS use the exact placeholder [SHOP_NAME] (brackets included, uppercase) when referring to the business name - never write an example name
+- are 3 lines max, usually 20-35 words, easy to read on a phone
+- are unique and varied - different openings, structures, and phrasings every time
+- adapt naturally to the business type (food place, clinic, salon, garage, etc.) without inventing specific facts, offers, prices, or experiences
+- never use hashtags, emojis, greetings, sign-offs, generic marketing words like "highly recommend" cliches, or anything that sounds like a template
+
+Write the prompt in a direct, conversational style with clear bullet instructions, opening with a realistic customer scenario. Return ONLY the prompt text itself, no quotes, no explanation.`;
+
+  for (const provider of providers) {
+    try {
+      const result = await requestWithRetry(provider, metaPrompt);
+      const text = String(result.text || '').trim().replace(/^["']|["']$/g, '');
+      if (text) {
+        updateProviderStatus(provider.provider, 'active', '', { selectedModel: result.model });
+        return text;
+      }
+    } catch (err) {
+      updateProviderStatus(provider.provider, 'failed', err.message, {});
+      console.error(`${provider.provider} failed for general prompt generation, trying next provider:`, err.message);
+    }
+  }
+  return null;
+}
+
+module.exports = { generateReviews, checkAIProviders, generateBusinessPrompt, generateGeneralPrompt };

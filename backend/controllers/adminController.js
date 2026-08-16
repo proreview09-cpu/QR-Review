@@ -8,7 +8,7 @@ const TokenUsage = require('../models/TokenUsage');
 const ActivityLog = require('../models/ActivityLog');
 const AIProviderStatus = require('../models/AIProviderStatus');
 const { generateQR } = require('../services/qrService');
-const { generateReviews, checkAIProviders } = require('../services/openaiService');
+const { generateReviews, checkAIProviders, generateGeneralPrompt } = require('../services/openaiService');
 const { log } = require('../services/logService');
 
 const AI_PROVIDER_LABELS = {
@@ -396,6 +396,19 @@ exports.getSettings = async (req, res) => {
       defaultLanguage: defaultLanguage?.value || 'english',
       generalReviewPrompt: generalReviewPrompt?.value || '',
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.generateGeneralPrompt = async (req, res) => {
+  try {
+    const prompt = await generateGeneralPrompt();
+    if (!prompt) {
+      return res.status(502).json({ message: 'All AI providers failed. Please check provider keys in Settings.' });
+    }
+    log('CREATE', 'prompt', 'Generated general review prompt with AI', { performedBy: req.user.email });
+    res.json({ prompt, generatedByAI: true });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
