@@ -156,7 +156,7 @@ export default function Categories() {
         <div>
           <p className="mb-2 text-sm font-semibold text-indigo-600">Review categories</p>
           <h2 className="text-3xl font-extrabold tracking-tight text-[#17182d]">Category master</h2>
-          <p className="mt-2 text-sm text-slate-500">Each category can carry default tone, language, pool settings, and an AI prompt applied to new shops.</p>
+          <p className="mt-2 text-sm text-slate-500">Categories organize businesses and apply defaults when a new shop is created.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={handleDownloadTemplate} className="rounded-xl border border-[#e9edf5] bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50">Download Excel template</button>
@@ -191,49 +191,56 @@ export default function Categories() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-600">Default tone</label>
-                <select name="defaultTone" value={form.defaultTone} onChange={handleChange} className="input bg-white">
-                  {TONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-600">Default language</label>
-                <select name="defaultLanguage" value={form.defaultLanguage} onChange={handleChange} className="input bg-white">
-                  {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
-                </select>
-              </div>
-            </div>
+            <details className="group rounded-xl border border-[#e9edf5] bg-[#f8f9fc]">
+              <summary className="cursor-pointer list-none px-4 py-3 text-sm font-bold text-slate-500 transition hover:text-indigo-600">
+                <span className="mr-1 inline-block transition-transform group-open:rotate-90">›</span> Advanced settings
+              </summary>
+              <div className="space-y-4 px-4 pb-4 pt-1">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-bold text-slate-600">Default tone</label>
+                    <select name="defaultTone" value={form.defaultTone} onChange={handleChange} className="input bg-white">
+                      {TONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-bold text-slate-600">Default language</label>
+                    <select name="defaultLanguage" value={form.defaultLanguage} onChange={handleChange} className="input bg-white">
+                      {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                    </select>
+                  </div>
+                </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-bold text-slate-600">AI generated prompt</label>
-              <textarea name="defaultPrompt" value={form.defaultPrompt} onChange={handleChange} rows={3} className="input resize-y" placeholder="Custom prompt for review generation. Use [SHOP_NAME] as placeholder." />
-              <p className="hint">Use <code className="rounded bg-slate-100 px-1">[SHOP_NAME]</code> to reference the shop name dynamically. Leave empty to use the general prompt.</p>
-            </div>
+                <div>
+                  <label className="mb-1 block text-sm font-bold text-slate-600">AI generated prompt</label>
+                  <textarea name="defaultPrompt" value={form.defaultPrompt} onChange={handleChange} rows={3} className="input resize-y" placeholder="Custom prompt for review generation. Use [SHOP_NAME] as placeholder." />
+                  <p className="hint">Use <code className="rounded bg-slate-100 px-1">[SHOP_NAME]</code> to reference the shop name dynamically. Leave empty to use the general prompt.</p>
+                </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <button type="button" onClick={handleGeneratePrompt} disabled={generatingPrompt || !form.name.trim()} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50">
-                {generatingPrompt ? 'Generating...' : 'Generate with AI'}
-              </button>
-              <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
-                <input type="checkbox" name="isActive" checked={form.isActive} onChange={handleChange} className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500" />
-                Active
-              </label>
-            </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button type="button" onClick={handleGeneratePrompt} disabled={generatingPrompt || !form.name.trim()} className="rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50">
+                    {generatingPrompt ? 'Generating...' : 'Generate with AI'}
+                  </button>
+                  <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                    <input type="checkbox" name="isActive" checked={form.isActive} onChange={handleChange} className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500" />
+                    Active
+                  </label>
+                </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-600">Review pool size</label>
-                <input type="number" name="reviewPoolMin" value={form.reviewPoolMin} onChange={handleChange} min="10" className="input" />
-                <p className="hint">Min reviews always available in queue.</p>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-bold text-slate-600">Review pool size</label>
+                    <input type="number" name="reviewPoolMin" value={form.reviewPoolMin} onChange={handleChange} min="10" className="input" />
+                    <p className="hint">Min reviews always available in queue.</p>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-bold text-slate-600">Generate batch size</label>
+                    <input type="number" name="reviewBatchSize" value={form.reviewBatchSize} onChange={handleChange} min="10" className="input" />
+                    <p className="hint">Reviews per generation batch.</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-600">Generate batch size</label>
-                <input type="number" name="reviewBatchSize" value={form.reviewBatchSize} onChange={handleChange} min="10" className="input" />
-                <p className="hint">Reviews per generation batch.</p>
-              </div>
-            </div>
+            </details>
 
             <div className="flex gap-3 pt-2">
               <button type="submit" disabled={saving} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50">
