@@ -149,7 +149,7 @@ exports.getShops = async (req, res) => {
 
 exports.createShop = async (req, res) => {
   try {
-    const { ownerEmail, ownerName, ownerPassword, shopName, businessName, googleReviewUrl, reviewTone, address, phone, language, aiPrompt, canOwnerSetTone, reviewPoolMin, reviewBatchSize, validityDays, category } = req.body;
+    const { ownerEmail, ownerName, ownerPassword, shopName, businessName, googleReviewUrl, reviewTone, address, phone, language, aiPrompt, promptMode, customerFields, canOwnerSetTone, reviewPoolMin, reviewBatchSize, validityDays, category } = req.body;
 
     let owner = await User.findOne({ email: ownerEmail?.toLowerCase() });
     if (!owner) {
@@ -171,6 +171,8 @@ exports.createShop = async (req, res) => {
       phone: phone || '',
       language: language || 'english',
       aiPrompt: aiPrompt || '',
+      promptMode: promptMode === 'override' ? 'override' : 'combine',
+      customerFields: Array.isArray(customerFields) ? customerFields : [],
       canOwnerSetTone: canOwnerSetTone || false,
       expiresAt: expiryFromDays(validityDays === undefined ? 30 : validityDays),
       reviewPoolMin: reviewPoolMin || 50,
@@ -188,7 +190,7 @@ exports.createShop = async (req, res) => {
 
     let warnings = [];
     try {
-      const reviews = await generateReviews(shopName, businessName, reviewTone || 'friendly', shop.reviewBatchSize || 50, language || 'english', shop._id, shop.aiPrompt, 'override', {
+      const reviews = await generateReviews(shopName, businessName, reviewTone || 'friendly', shop.reviewBatchSize || 50, language || 'english', shop._id, shop.aiPrompt, shop.promptMode || 'combine', {
         ownerName: shop.ownerName,
         address: shop.address,
         phone: shop.phone,
@@ -226,7 +228,7 @@ exports.updateShop = async (req, res) => {
       const excludeTexts = oldReviews.map((r) => r.content);
       await Review.deleteMany({ shop: shop._id, isUsed: false });
       try {
-        const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 50, shop.language, shop._id, shop.aiPrompt, 'override', {
+        const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 50, shop.language, shop._id, shop.aiPrompt, shop.promptMode || 'combine', {
           ownerName: shop.ownerName,
           address: shop.address,
           phone: shop.phone,
@@ -261,7 +263,7 @@ exports.regenerateReviews = async (req, res) => {
       shop.language,
       shop._id,
       shop.aiPrompt,
-      'override',
+      shop.promptMode || 'combine',
       { ownerName: shop.ownerName, address: shop.address, phone: shop.phone },
       excludeTexts,
     );
@@ -500,7 +502,7 @@ exports.getShopReviews = async (req, res) => {
       .sort({ usedAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit))
-      .select('content isUsed usedAt isPosted postedAt copiedByIp copiedByUA createdAt');
+      .select('content isUsed usedAt isPosted postedAt copiedByIp copiedByUA customerDetails createdAt');
 
     const total = await Review.countDocuments({ shop: shop._id, isUsed: true });
 

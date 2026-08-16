@@ -465,11 +465,13 @@ Tone: ${tone || 'friendly'}
 Language: ${langName}
 
 The prompt must instruct an AI to write short, authentic, human-sounding Google reviews that:
+- read like a real customer typed them on their phone - natural, casual, genuine
 - mention the shop name naturally
 - are 3 lines max, usually 20-35 words
 - are unique and varied in structure, no repeated phrases
-- avoid hashtags, emojis, greetings, sign-offs, generic phrases
+- avoid hashtags, emojis, greetings, sign-offs, generic marketing phrases
 - never invent specific facts, offers, or experiences
+- reflect the shop's category and business type
 
 Write the prompt in a direct, conversational style with clear bullet instructions, opening with a realistic customer scenario. Return ONLY the prompt text itself, no quotes, no explanation.`;
 

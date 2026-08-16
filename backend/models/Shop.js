@@ -1,5 +1,12 @@
 const mongoose = require('mongoose');
 
+const customerFieldSchema = new mongoose.Schema({
+  key: { type: String, required: true },
+  label: { type: String, required: true },
+  enabled: { type: Boolean, default: false },
+  required: { type: Boolean, default: false },
+}, { _id: false });
+
 const shopSchema = new mongoose.Schema({
   shopName: { type: String, required: true, trim: true },
   businessName: { type: String, required: true, trim: true },
@@ -29,6 +36,15 @@ const shopSchema = new mongoose.Schema({
   reviewBatchSize: { type: Number, default: 50 },
   category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', default: null },
   aiPrompt: { type: String, trim: true, default: '' },
+  promptMode: {
+    type: String,
+    enum: ['combine', 'override'],
+    default: 'combine',
+  },
+  customerFields: {
+    type: [customerFieldSchema],
+    default: [],
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Shop', shopSchema);

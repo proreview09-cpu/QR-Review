@@ -29,12 +29,23 @@ const VALIDITY_OPTIONS = [
   { value: 0, label: 'Unlimited' },
 ];
 
+const CUSTOMER_FIELDS = [
+  { key: 'name', label: 'Full name' },
+  { key: 'phone', label: 'Phone number' },
+  { key: 'email', label: 'Email' },
+  { key: 'city', label: 'City' },
+  { key: 'orderNo', label: 'Order / receipt number' },
+  { key: 'vehicleNo', label: 'Vehicle number' },
+  { key: 'note', label: 'Note / feedback' },
+];
+
 const emptyForm = () => ({
   ownerEmail: '', ownerName: '', ownerPassword: '',
   businessName: '', shopName: '', address: '', phone: '',
   googleReviewUrl: '', reviewTone: 'friendly', language: 'english',
   canOwnerSetTone: false, validityDays: 30, reviewPoolMin: 50, reviewBatchSize: 50,
-  category: '', customCategoryName: '', aiPrompt: '',
+  category: '', customCategoryName: '', aiPrompt: '', promptMode: 'combine',
+  customerFields: CUSTOMER_FIELDS.map((field) => ({ ...field, enabled: false, required: false })),
 });
 
 export default function AddShop() {
@@ -262,6 +273,15 @@ export default function AddShop() {
               <p className="hint">Gujarati shops get Gujarati reviews, Hindi shops get Hindi reviews.</p>
             </div>
 
+            <div>
+              <label className="mb-1 block text-sm font-bold text-slate-600">Prompt mode</label>
+              <select name="promptMode" value={form.promptMode} onChange={handleChange} className="input bg-white">
+                <option value="combine">Merge with default prompt (Recommended)</option>
+                <option value="override">Only shop prompt</option>
+              </select>
+              <p className="hint">Merge: shop prompt + default prompt from Settings both used. Only shop prompt: default is ignored.</p>
+            </div>
+
             <div className="md:col-span-2">
               <div className="mb-1 flex items-center justify-between">
                 <label className="block text-sm font-bold text-slate-600">AI generated prompt</label>
@@ -303,6 +323,50 @@ export default function AddShop() {
                 <p className="text-xs text-slate-400">If unchecked, only admin can modify review tone &amp; language.</p>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
+          <h3 className="mb-1 text-lg font-extrabold">Customer details form</h3>
+          <p className="mb-6 text-xs text-slate-400">Enable fields customers must fill before copying a review. Values appear in the admin activity table. Can be changed later.</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {CUSTOMER_FIELDS.map((field) => {
+              const saved = form.customerFields.find((item) => item.key === field.key);
+              return (
+                <div key={field.key} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${saved?.enabled ? 'border-indigo-200 bg-indigo-50/60' : 'border-slate-200 bg-[#f8f9fc]'}`}>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={saved?.enabled || false}
+                      onChange={(e) => {
+                        setForm({
+                          ...form,
+                          customerFields: form.customerFields.map((item) => item.key === field.key ? { ...item, enabled: e.target.checked, required: e.target.checked && item.required ? true : item.required } : item),
+                        });
+                      }}
+                      className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-bold text-slate-700">{field.label}</span>
+                  </div>
+                  {saved?.enabled && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-500">Required</span>
+                      <input
+                        type="checkbox"
+                        checked={saved?.required || false}
+                        onChange={(e) => {
+                          setForm({
+                            ...form,
+                            customerFields: form.customerFields.map((item) => item.key === field.key ? { ...item, required: e.target.checked } : item),
+                          });
+                        }}
+                        className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
 

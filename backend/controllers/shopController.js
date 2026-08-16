@@ -56,7 +56,7 @@ exports.updateMyShop = async (req, res) => {
       const oldReviews = await Review.find({ shop: shop._id }).select('content').lean();
       await Review.deleteMany({ shop: shop._id });
       try {
-        const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 50, shop.language, shop._id, shop.aiPrompt || '', 'override', {
+        const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 50, shop.language, shop._id, shop.aiPrompt || '', shop.promptMode || 'combine', {
           ownerName: shop.ownerName,
           address: shop.address,
           phone: shop.phone,

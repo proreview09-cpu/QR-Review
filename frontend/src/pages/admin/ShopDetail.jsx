@@ -19,6 +19,16 @@ const LANGUAGES = [
   { value: 'hindi', label: 'Hindi' },
 ];
 
+const CUSTOMER_FIELDS = [
+  { key: 'name', label: 'Full name' },
+  { key: 'phone', label: 'Phone number' },
+  { key: 'email', label: 'Email' },
+  { key: 'city', label: 'City' },
+  { key: 'orderNo', label: 'Order / receipt number' },
+  { key: 'vehicleNo', label: 'Vehicle number' },
+  { key: 'note', label: 'Note / feedback' },
+];
+
 function toLocalDateTime(value) {
   if (!value) return '';
   const date = new Date(value);
@@ -73,6 +83,11 @@ export default function ShopDetail() {
           phone: data.shop.phone || '', googleReviewUrl: data.shop.googleReviewUrl,
           reviewTone: data.shop.reviewTone, language: data.shop.language || 'english',
           aiPrompt: data.shop.aiPrompt || '',
+          promptMode: data.shop.promptMode || 'combine',
+          customerFields: CUSTOMER_FIELDS.map((field) => {
+            const saved = (data.shop.customerFields || []).find((item) => item.key === field.key);
+            return { ...field, enabled: !!saved?.enabled, required: !!saved?.required };
+          }),
           isActive: data.shop.isActive, canOwnerSetTone: data.shop.canOwnerSetTone || false,
           reviewPoolMin: data.shop.reviewPoolMin || 50, reviewBatchSize: data.shop.reviewBatchSize || 50,
           expiresAt: toLocalDateTime(data.shop.expiresAt),
@@ -306,6 +321,14 @@ export default function ShopDetail() {
               <p className="hint">Gujarati shops get Gujarati reviews, Hindi shops get Hindi reviews.</p>
             </Field>
 
+            <Field label="Prompt mode">
+              <select name="promptMode" value={editForm.promptMode || 'combine'} onChange={handleChange} className="input bg-white">
+                <option value="combine">Merge with default prompt (Recommended)</option>
+                <option value="override">Only shop prompt</option>
+              </select>
+              <p className="hint">Merge: shop prompt + default prompt from Settings both used. Only shop prompt: default is ignored.</p>
+            </Field>
+
             <div className="md:col-span-2">
               <div className="mb-1 flex items-center justify-between">
                 <label className="block text-sm font-bold text-slate-600">AI generated prompt</label>
@@ -378,6 +401,59 @@ export default function ShopDetail() {
       </section>
 
       <section className="mb-6 rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
+        <h3 className="mb-1 text-lg font-extrabold">Customer details form</h3>
+        <p className="mb-4 text-sm text-slate-500">Enable fields customers must fill before copying a review. Values appear in the activity table below.</p>
+        <fieldset disabled={readOnly} className="contents">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {CUSTOMER_FIELDS.map((field) => {
+              const saved = editForm.customerFields?.find((item) => item.key === field.key);
+              const enabled = !!saved?.enabled;
+              const required = !!saved?.required;
+              return (
+                <div key={field.key} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${enabled ? 'border-indigo-200 bg-indigo-50/60' : 'border-slate-200 bg-[#f8f9fc]'}`}>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={(e) => {
+                        setEditForm({
+                          ...editForm,
+                          customerFields: editForm.customerFields.map((item) => item.key === field.key ? { ...item, enabled: e.target.checked, required: e.target.checked && item.required ? true : item.required } : item),
+                        });
+                        setChanged(true);
+                      }}
+                      className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-bold text-slate-700">{field.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {enabled && (
+                      <>
+                        <span className="text-xs font-bold text-slate-500">Required</span>
+                        <input
+                          type="checkbox"
+                          checked={required}
+                          onChange={(e) => {
+                            setEditForm({
+                              ...editForm,
+                              customerFields: editForm.customerFields.map((item) => item.key === field.key ? { ...item, required: e.target.checked } : item),
+                            });
+                            setChanged(true);
+                          }}
+                          className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-xs text-slate-400">No fields enabled = customers copy reviews directly without filling any details.</p>
+        </fieldset>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
         <h3 className="mb-1 text-lg font-extrabold">Owner account</h3>
         <p className="mb-4 text-sm text-slate-500"><span className="font-bold">{shop.owner?.name}</span> &middot; {shop.owner?.email} &middot; created {new Date(shop.createdAt).toLocaleDateString()}</p>
         <div className="rounded-xl bg-[#f8f9fc] p-4">
@@ -414,6 +490,7 @@ export default function ShopDetail() {
                 <thead>
                   <tr className="border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                     <th className="px-3 py-3">Review</th>
+                    <th className="px-3 py-3">Customer</th>
                     <th className="px-3 py-3">Copied at</th>
                     <th className="px-3 py-3">Device</th>
                     <th className="px-3 py-3">IP</th>
@@ -421,17 +498,26 @@ export default function ShopDetail() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {reviewHistory.map((r) => (
-                    <tr key={r._id} className="hover:bg-slate-50">
-                      <td className="max-w-xs truncate px-3 py-4">{r.content}</td>
-                      <td className="whitespace-nowrap px-3 py-4 text-slate-500">{new Date(r.usedAt).toLocaleString()}</td>
-                      <td className="max-w-[120px] truncate px-3 py-4 text-xs text-slate-500">{r.copiedByUA || '-'}</td>
-                      <td className="px-3 py-4 font-mono text-xs text-slate-500">{r.copiedByIp || '-'}</td>
-                      <td className="px-3 py-4 text-center">
-                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${r.isPosted ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{r.isPosted ? 'Posted' : 'Pending'}</span>
-                      </td>
-                    </tr>
-                  ))}
+                  {reviewHistory.map((r) => {
+                    const details = r.customerDetails || {};
+                    const detailText = Object.entries(details)
+                      .map(([key, value]) => `${(CUSTOMER_FIELDS.find((f) => f.key === key)?.label || key)}: ${value}`)
+                      .join(' · ');
+                    return (
+                      <tr key={r._id} className="hover:bg-slate-50">
+                        <td className="max-w-xs truncate px-3 py-4">{r.content}</td>
+                        <td className="max-w-[160px] px-3 py-4">
+                          {detailText ? <span className="block max-w-[160px] truncate text-xs text-slate-600" title={detailText}>{detailText}</span> : <span className="text-xs text-slate-300">-</span>}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-slate-500">{new Date(r.usedAt).toLocaleString()}</td>
+                        <td className="max-w-[120px] truncate px-3 py-4 text-xs text-slate-500">{r.copiedByUA || '-'}</td>
+                        <td className="px-3 py-4 font-mono text-xs text-slate-500">{r.copiedByIp || '-'}</td>
+                        <td className="px-3 py-4 text-center">
+                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${r.isPosted ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{r.isPosted ? 'Posted' : 'Pending'}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

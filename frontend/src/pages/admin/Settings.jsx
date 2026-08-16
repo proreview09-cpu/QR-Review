@@ -19,6 +19,8 @@ export default function Settings() {
   const [generalReviewPrompt, setGeneralReviewPrompt] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState(null);
 
   useEffect(() => {
     api.get('/admin/settings').then(({ data }) => {
@@ -55,6 +57,24 @@ export default function Settings() {
       toast.error(error.response?.data?.message || 'Failed to save settings');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCheck = async () => {
+    setChecking(true);
+    setCheckResult(null);
+    try {
+      const { data } = await api.post('/admin/ai-status/check');
+      setCheckResult(data);
+      if (data.currentProvider) {
+        toast.success(`AI check done - ${data.currentProvider}`);
+      } else {
+        toast.error('No AI provider is working right now');
+      }
+    } catch {
+      toast.error('Failed to check AI providers');
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -103,6 +123,35 @@ export default function Settings() {
           <button type="button" onClick={() => setAIProviders((current) => [...current, newProvider()])} className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-bold text-indigo-700 hover:bg-indigo-100">
             + Add AI provider
           </button>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleCheck}
+              disabled={checking}
+              className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {checking ? 'Checking...' : 'Test AI providers now'}
+            </button>
+            {checkResult?.currentProvider && (
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                Working: {checkResult.currentProvider}
+              </span>
+            )}
+          </div>
+
+          {checkResult?.providers?.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {checkResult.providers.map((provider) => (
+                <div key={provider.provider} className="flex items-center justify-between rounded-lg border border-[#e9edf5] bg-white px-3 py-2 text-sm">
+                  <span className="font-bold text-slate-600">{provider.label}</span>
+                  <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${provider.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                    {provider.status === 'active' ? 'Working' : 'Failed'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
@@ -133,7 +182,7 @@ export default function Settings() {
         <section className="rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
           <label className="mb-1 block text-sm font-bold text-slate-600">General review prompt</label>
           <textarea value={generalReviewPrompt} onChange={(e) => setGeneralReviewPrompt(e.target.value)} rows={6} className="input resize-y" placeholder="Write general instructions for every shop. Example: Mention fresh products, quick service, and helpful staff." />
-          <p className="hint">Used by every shop when no shop-specific prompt is set.</p>
+          <p className="hint">Used by every shop. With prompt mode "Merge" (default), this prompt and the shop's own prompt are both sent to the AI. With "Only shop prompt", this is ignored for shops that have their own prompt.</p>
           <PromptVariables onInsert={insertPromptVariable} />
         </section>
 

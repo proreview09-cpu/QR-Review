@@ -29,6 +29,7 @@ exports.getShopPublic = async (req, res) => {
         googleReviewUrl: shop.googleReviewUrl,
         reviewTone: shop.reviewTone,
       },
+      customerFields: (shop.customerFields || []).filter((field) => field.enabled),
       reviews: unusedReviews,
       reviewCount: unusedReviews.length,
     });
@@ -50,6 +51,13 @@ exports.copyReview = async (req, res) => {
     review.usedAt = new Date();
     review.copiedByIp = req.ip || req.connection?.remoteAddress || '';
     review.copiedByUA = (req.headers['user-agent'] || '').substring(0, 200);
+    if (req.body?.details && typeof req.body.details === 'object') {
+      const clean = {};
+      for (const [key, value] of Object.entries(req.body.details)) {
+        clean[key] = String(value || '').trim().slice(0, 300);
+      }
+      review.customerDetails = clean;
+    }
     await review.save();
 
     await Shop.findByIdAndUpdate(review.shop, { $inc: { totalReviewsCopied: 1 } });
@@ -60,7 +68,7 @@ exports.copyReview = async (req, res) => {
 
     if (unusedCount < shop.reviewPoolMin) {
       const existing = await Review.find({ shop: shop._id }).select('content').lean();
-      generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 10, shop.language, shop._id, shop.aiPrompt || '', 'override', {
+      generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 10, shop.language, shop._id, shop.aiPrompt || '', shop.promptMode || 'combine', {
         ownerName: shop.ownerName,
         address: shop.address,
         phone: shop.phone,
@@ -91,7 +99,7 @@ exports.generateMore = async (req, res) => {
 
     if (needed > 0) {
       const existing = await Review.find({ shop: shop._id }).select('content').lean();
-      const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, needed, shop.language, shop._id, shop.aiPrompt || '', 'override', {
+      const reviews = await generateReviews(shop.shopName, shop.businessName, shop.reviewTone, needed, shop.language, shop._id, shop.aiPrompt || '', shop.promptMode || 'combine', {
         ownerName: shop.ownerName,
         address: shop.address,
         phone: shop.phone,
