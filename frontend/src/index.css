@@ -2,4 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-body { @apply bg-gray-50 text-gray-900 min-h-screen; }
+body { @apply bg-[#f7f9fd] text-[#17182d] min-h-screen; font-family: 'Urbanist', ui-sans-serif, system-ui, sans-serif; }
+
+button, input, select, textarea { font: inherit; }
+
+::selection { background: #ddd6fe; color: #312e81; }
+
+@layer components {
+  .input { @apply w-full px-3 py-2 border border-[#e2e6ef] rounded-xl bg-white text-sm text-[#17182d] focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none placeholder:text-slate-400; }
+  .hint { @apply text-xs text-slate-400 mt-1; }
+}

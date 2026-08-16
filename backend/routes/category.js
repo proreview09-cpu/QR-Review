@@ -9,7 +9,8 @@ const {
   deleteCategory,
   exportCategories,
   importCategories,
-  downloadTemplate
+  downloadTemplate,
+  generatePrompt
 } = require('../controllers/categoryController');
 
 const upload = multer({ 
@@ -38,5 +39,6 @@ router.post('/', createCategory);
 router.put('/:id', updateCategory);
 router.delete('/:id', deleteCategory);
 router.post('/import', upload.single('file'), importCategories);
+router.post('/generate-prompt', generatePrompt);
 
 module.exports = router;

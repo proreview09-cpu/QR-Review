@@ -2,9 +2,24 @@ const Category = require('../models/Category');
 const xlsx = require('xlsx');
 const { log } = require('../services/logService');
 
+const REVIEW_TONES = {
+  professional: 'formal and business-like',
+  friendly: 'warm and approachable',
+  casual: 'relaxed and conversational',
+  enthusiastic: 'excited and energetic',
+  grateful: 'thankful and appreciative',
+  humorous: 'light-hearted and funny',
+};
+
+const LANGUAGES = {
+  english: 'English',
+  gujarati: 'Gujarati (ગુજરાતી)',
+  hindi: 'Hindi (हिन्दी)',
+};
+
 exports.getCategories = async (req, res) => {
   try {
-    const { page = 1, limit = 50, search, isActive } = req.query;
+    const { page = 1, limit = 50, search, isActive, activeOnly } = req.query;
     const query = {};
     
     if (search) {
@@ -16,6 +31,10 @@ exports.getCategories = async (req, res) => {
     
     if (isActive !== undefined) {
       query.isActive = isActive === 'true';
+    }
+    
+    if (activeOnly === 'true') {
+      query.isActive = true;
     }
     
     const skip = (page - 1) * limit;
@@ -101,7 +120,10 @@ exports.exportCategories = async (req, res) => {
         'Slug': cat.slug,
         'Description': cat.description || '',
         'AI Prompt': cat.aiPrompt || '',
-        'Parent Category': cat.parentCategory ? cat.parentCategory.toString() : '',
+        'Default Tone': cat.defaultTone || 'friendly',
+        'Default Language': cat.defaultLanguage || 'english',
+        'Review Pool': cat.reviewPoolMin || 50,
+        'Batch Size': cat.reviewBatchSize || 50,
         'Active': cat.isActive ? 'Yes' : 'No',
         'Display Order': cat.displayOrder,
         'Icon': cat.icon || '',
@@ -130,7 +152,7 @@ exports.importCategories = async (req, res) => {
     const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_json(worksheet.Sheets[sheetName]);
+    const data = xlsx.utils.sheet_to_json(worksheet);
     
     const results = {
       created: 0,
@@ -155,6 +177,11 @@ exports.importCategories = async (req, res) => {
           slug: slug,
           description: row['Description']?.trim() || '',
           aiPrompt: row['AI Prompt']?.trim() || '',
+          defaultPrompt: row['AI Prompt']?.trim() || '',
+          defaultTone: row['Default Tone']?.trim() || 'friendly',
+          defaultLanguage: row['Default Language']?.trim() || 'english',
+          reviewPoolMin: parseInt(row['Review Pool']) || 50,
+          reviewBatchSize: parseInt(row['Batch Size']) || 50,
           parentCategory: row['Parent Category'] || null,
           isActive: row['Active'] === 'Yes' || row['Active'] === true,
           displayOrder: parseInt(row['Display Order']) || 0,
@@ -193,7 +220,10 @@ exports.downloadTemplate = async (req, res) => {
         'Slug': 'restaurant',
         'Description': 'Food and dining establishments',
         'AI Prompt': 'Focus on food quality, service speed, ambiance, and value for money',
-        'Parent Category': '',
+        'Default Tone': 'friendly',
+        'Default Language': 'english',
+        'Review Pool': 50,
+        'Batch Size': 50,
         'Active': 'Yes',
         'Display Order': 1,
         'Icon': '🍽️',
@@ -204,7 +234,10 @@ exports.downloadTemplate = async (req, res) => {
         'Slug': 'retail-store',
         'Description': 'Retail shops and boutiques',
         'AI Prompt': 'Focus on product variety, staff helpfulness, pricing, and store cleanliness',
-        'Parent Category': '',
+        'Default Tone': 'friendly',
+        'Default Language': 'english',
+        'Review Pool': 50,
+        'Batch Size': 50,
         'Active': 'Yes',
         'Display Order': 2,
         'Icon': '🛍️',
@@ -215,7 +248,10 @@ exports.downloadTemplate = async (req, res) => {
         'Slug': 'beauty-salon',
         'Description': 'Beauty and wellness services',
         'AI Prompt': 'Focus on staff expertise, hygiene, results, and customer service',
-        'Parent Category': '',
+        'Default Tone': 'friendly',
+        'Default Language': 'gujarati',
+        'Review Pool': 50,
+        'Batch Size': 50,
         'Active': 'Yes',
         'Display Order': 3,
         'Icon': '💇',
@@ -224,13 +260,68 @@ exports.downloadTemplate = async (req, res) => {
     ];
     
     const worksheet = xlsx.utils.json_to_sheet(sampleData);
-    xlsx.utils.book_append_sheet(xlsx.utils.book_new(), xlsx.utils.json_to_sheet(sampleData), 'Categories Template');
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Categories Template');
     
-    const buffer = xlsx.write(xlsx.utils.book_new(), { type: 'buffer', bookType: 'xlsx' });
+    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
     
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=category-template.xlsx');
     res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Generate AI prompt for category or shop
+exports.generatePrompt = async (req, res) => {
+  try {
+    const { name, description, shopName, businessName, tone, language } = req.body;
+    const targetName = shopName || name;
+    const targetBusiness = businessName || name;
+    const reviewTone = REVIEW_TONES[tone] || 'friendly and natural';
+    const langName = LANGUAGES[language] || 'English';
+
+    if (!targetName) {
+      return res.status(400).json({ message: 'Category name or shop name is required' });
+    }
+
+    const lines = [
+      `You are a real customer who just visited "${targetName}"${shopName && targetBusiness && targetBusiness !== targetName ? ` (${targetBusiness})` : ''}.`,
+      `Write short Google reviews in ${langName}.`,
+      '',
+      'BUSINESS-SPECIFIC INSTRUCTIONS:',
+    ];
+
+    if (description) {
+      lines.push(`- Business type: ${description}`);
+    }
+    if (shopName) {
+      lines.push(`- Shop name: "${shopName}"`);
+      lines.push(`- Business name: "${businessName || ''}"`);
+    }
+    if (name) {
+      lines.push(`- Category: ${name}`);
+    }
+    lines.push(`- Tone: ${reviewTone}`);
+    lines.push(`- Language: ${langName}`);
+    lines.push(`- Reviews must naturally mention "${shopName || name}"`);
+
+    lines.push(
+      '',
+      'CRITICAL RULES:',
+      '- Write like a REAL person - use casual language, typos ok, short sentences',
+      '- Maximum 3 lines and 40 words; usually keep reviews between 20 and 35 words',
+      '- MUST naturally mention the shop name in the review',
+      '- Each review should feel unique and authentic',
+      '- Vary sentence structure - some excited, some simple, some detailed',
+      '- No hashtags, no emojis, no greetings like "Dear", no sign-offs',
+      '- No generic phrases like "highly recommend" in every review',
+      '- Do not invent specific facts, offers, products, or experiences that are not supported by the instructions',
+      '',
+      'Return ONLY JSON array: ["review1","review2",...]'
+    );
+
+    res.json({ prompt: lines.join('\n') });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

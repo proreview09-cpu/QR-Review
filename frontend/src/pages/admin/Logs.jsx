@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../services/api';
 
 const ACTION_COLORS = {
-  CREATE: 'bg-green-100 text-green-700',
+  CREATE: 'bg-emerald-100 text-emerald-700',
   UPDATE: 'bg-blue-100 text-blue-700',
   DELETE: 'bg-red-100 text-red-700',
   LOGIN: 'bg-indigo-100 text-indigo-700',
@@ -35,15 +35,19 @@ export default function Logs() {
   useEffect(() => { fetchLogs(); }, []);
 
   return (
-    <div>
-      <h2 className="text-2xl font-bold mb-6">Activity Log</h2>
+    <div className="mx-auto max-w-[1480px]">
+      <div className="mb-8">
+        <p className="mb-2 text-sm font-semibold text-indigo-600">Audit trail</p>
+        <h2 className="text-3xl font-extrabold tracking-tight">Activity log</h2>
+        <p className="mt-2 text-sm text-slate-500">Every create, update, delete, login, and review action is recorded here.</p>
+      </div>
 
       <div className="flex flex-wrap gap-2 mb-6">
         {['', 'CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'ERROR', 'COPY', 'POSTED', 'SETTINGS'].map((a) => (
           <button
             key={a}
             onClick={() => { setFilter(a); fetchLogs(1, a); }}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${filter === a ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${filter === a ? 'bg-indigo-600 text-white' : 'bg-[#eef1f8] text-slate-500 hover:bg-indigo-100 hover:text-indigo-700'}`}
           >
             {a || 'All'}
           </button>
@@ -52,50 +56,50 @@ export default function Logs() {
 
       {loading ? (
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+          <div className="h-9 w-9 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
         </div>
       ) : (
         <>
-          <p className="text-sm text-gray-400 mb-3">{total} total events</p>
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <p className="mb-3 text-sm text-slate-400">{total} total events</p>
+          <div className="overflow-hidden rounded-2xl border border-[#e9edf5] bg-white shadow-[0_8px_28px_rgba(41,45,54,0.05)]">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50">
+              <thead className="bg-[#f8f9fc]">
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 w-24">Time</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 w-24">Action</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Description</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500 w-40">By</th>
+                  <th className="w-40 px-4 py-3 text-left font-bold text-slate-400">Time</th>
+                  <th className="w-28 px-4 py-3 text-left font-bold text-slate-400">Action</th>
+                  <th className="px-4 py-3 text-left font-bold text-slate-400">Description</th>
+                  <th className="w-44 px-4 py-3 text-left font-bold text-slate-400">By</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-[#f1f3f8]">
                 {logs.map((l) => (
-                  <tr key={l._id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-400 whitespace-nowrap text-xs">
+                  <tr key={l._id} className="transition hover:bg-slate-50">
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-400">
                       {new Date(l.timestamp).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ACTION_COLORS[l.action] || 'bg-gray-100 text-gray-600'}`}>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${ACTION_COLORS[l.action] || 'bg-gray-100 text-gray-600'}`}>
                         {l.action}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-700">{l.description}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{l.performedBy}</td>
+                    <td className="px-4 py-3 text-slate-600">{l.description}</td>
+                    <td className="px-4 py-3 text-xs text-slate-400">{l.performedBy}</td>
                   </tr>
                 ))}
                 {logs.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">No activity yet</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">No activity yet</td></tr>
                 )}
               </tbody>
             </table>
           </div>
 
           {total > 25 && (
-            <div className="flex justify-center gap-3 mt-4">
+            <div className="mt-4 flex justify-center gap-3">
               <button disabled={page <= 1} onClick={() => fetchLogs(page - 1, filter)}
-                className="px-4 py-2 text-sm border rounded-lg disabled:opacity-30 hover:bg-gray-50">Prev</button>
-              <span className="px-4 py-2 text-sm text-gray-500">Page {page}</span>
+                className="rounded-xl border border-[#e7eaf2] px-4 py-2 text-sm font-bold text-slate-600 disabled:opacity-30 hover:bg-slate-50">Prev</button>
+              <span className="px-4 py-2 text-sm text-slate-500">Page {page}</span>
               <button disabled={page * 25 >= total} onClick={() => fetchLogs(page + 1, filter)}
-                className="px-4 py-2 text-sm border rounded-lg disabled:opacity-30 hover:bg-gray-50">Next</button>
+                className="rounded-xl border border-[#e7eaf2] px-4 py-2 text-sm font-bold text-slate-600 disabled:opacity-30 hover:bg-slate-50">Next</button>
             </div>
           )}
         </>

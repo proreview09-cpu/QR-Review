@@ -8,15 +8,26 @@ import AdminAddShop from './pages/admin/AddShop';
 import AdminShopDetail from './pages/admin/ShopDetail';
 import AdminCategories from './pages/admin/Categories';
 import AdminSettings from './pages/admin/Settings';
+import AdminAIProviders from './pages/admin/AIProviders';
 import AdminLogs from './pages/admin/Logs';
 import ShopOwnerDashboard from './pages/shopowner/Dashboard';
+import OwnerQRCode from './pages/shopowner/QRCode';
 import ReviewPage from './pages/customer/ReviewPage';
 
 function ProtectedRoute({ children, role }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  if (loading) return <AuthLoading />;
   if (!user) return <Navigate to="/login" />;
   if (role && user.role !== role) return <Navigate to="/login" />;
   return children;
+}
+
+function AuthLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#f7f9fd]">
+      <div className="animate-spin h-9 w-9 border-4 border-indigo-600 border-t-transparent rounded-full" />
+    </div>
+  );
 }
 
 export default function App() {
@@ -29,11 +40,13 @@ export default function App() {
       <Route path="/admin/shops" element={<Layout><ProtectedRoute role="admin"><AdminShops /></ProtectedRoute></Layout>} />
       <Route path="/admin/shops/add" element={<Layout><ProtectedRoute role="admin"><AdminAddShop /></ProtectedRoute></Layout>} />
       <Route path="/admin/shops/:id" element={<Layout><ProtectedRoute role="admin"><AdminShopDetail /></ProtectedRoute></Layout>} />
-      <Route path="/admin/settings" element={<Layout><ProtectedRoute role="admin"><AdminSettings /></ProtectedRoute></Layout>} />
-      <Route path="/admin/logs" element={<Layout><ProtectedRoute role="admin"><AdminLogs /></ProtectedRoute></Layout>} />
       <Route path="/admin/categories" element={<Layout><ProtectedRoute role="admin"><AdminCategories /></ProtectedRoute></Layout>} />
+      <Route path="/admin/settings" element={<Layout><ProtectedRoute role="admin"><AdminSettings /></ProtectedRoute></Layout>} />
+      <Route path="/admin/ai" element={<Layout><ProtectedRoute role="admin"><AdminAIProviders /></ProtectedRoute></Layout>} />
+      <Route path="/admin/logs" element={<Layout><ProtectedRoute role="admin"><AdminLogs /></ProtectedRoute></Layout>} />
 
       <Route path="/dashboard" element={<ProtectedRoute role="shop_owner"><ShopOwnerDashboard /></ProtectedRoute>} />
+      <Route path="/qr" element={<ProtectedRoute role="shop_owner"><OwnerQRCode /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/login" />} />
     </Routes>

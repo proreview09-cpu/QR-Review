@@ -91,10 +91,10 @@ export default function ReviewPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700">
-        <div className="text-center text-white">
-          <div className="animate-spin h-12 w-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-lg">Loading reviews...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#f7f9fd]">
+        <div className="text-center text-[#17182d]">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+          <p className="text-lg font-semibold">Loading reviews...</p>
         </div>
       </div>
     );
@@ -102,23 +102,24 @@ export default function ReviewPage() {
 
   if (!shop) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md text-center">
-          <div className="text-6xl mb-4">🔒</div>
-          <h2 className="text-xl font-bold text-gray-900">Shop Not Found</h2>
-          <p className="text-gray-500 mt-2">This shop may be inactive or does not exist.</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#f7f9fd] p-4">
+        <div className="max-w-md rounded-2xl border border-[#e9edf5] bg-white p-8 text-center shadow-[0_8px_28px_rgba(41,45,54,0.05)]">
+          <div className="mb-4 text-6xl">🔒</div>
+          <h2 className="text-xl font-extrabold text-[#17182d]">Shop Not Found</h2>
+          <p className="mt-2 text-sm text-slate-500">This shop may be inactive or does not exist.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700">
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="text-center text-white mb-8">
-          <h1 className="text-3xl font-bold mb-2">{shop.shopName}</h1>
-          <p className="text-blue-100 text-lg">Tap any review to copy, then paste it on Google</p>
-          <p className="text-blue-200 text-sm mt-1">{reviews.length} reviews available</p>
+    <div className="min-h-screen bg-[#f7f9fd]">
+      <div className="mx-auto max-w-2xl px-4 py-8">
+        <div className="mb-8 text-center">
+          <p className="mb-2 text-sm font-semibold text-indigo-600">Leave us a Google review</p>
+          <h1 className="mb-2 text-3xl font-extrabold tracking-tight text-[#17182d]">{shop.shopName}</h1>
+          <p className="text-lg text-slate-500">Tap any review to copy, then paste it on Google</p>
+          <p className="mt-1 text-sm text-slate-400">{reviews.length} reviews available</p>
         </div>
 
         <div className="space-y-3">
@@ -134,20 +135,20 @@ export default function ReviewPage() {
         </div>
 
         {reviews.length === 0 && (
-          <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
-            <div className="text-4xl mb-4">🎉</div>
-            <h3 className="text-lg font-semibold text-gray-900">All reviews used</h3>
-            <p className="text-gray-500 mt-1">New reviews are being generated. Refresh the page.</p>
+          <div className="rounded-2xl border border-[#e9edf5] bg-white p-8 text-center shadow-[0_8px_28px_rgba(41,45,54,0.05)]">
+            <div className="mb-4 text-4xl">🎉</div>
+            <h3 className="text-lg font-extrabold text-[#17182d]">All reviews used</h3>
+            <p className="mt-1 text-sm text-slate-500">New reviews are being generated. Refresh the page.</p>
             <button onClick={() => { setLoading(true); loadShop(); }}
-              className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              className="mt-4 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-700">
               Refresh Reviews
             </button>
           </div>
         )}
 
-        <div className="text-center mt-8 text-blue-200 text-sm">
-          <p>How it works:</p>
-          <ol className="space-y-1 mt-2">
+        <div className="mt-8 text-center text-sm text-slate-400">
+          <p className="font-bold text-slate-500">How it works:</p>
+          <ol className="mt-2 space-y-1">
             <li>1. Tap "Copy" on any review you like</li>
             <li>2. Google review page will open</li>
             <li>3. Paste and submit your review!</li>
@@ -161,30 +162,30 @@ export default function ReviewPage() {
 function ReviewCard({ review, onCopy, isCopied, onPosted }) {
   if (isCopied) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-5 border-2 border-green-300">
-        <p className="text-gray-800 leading-relaxed">{review.content}</p>
+      <div className="rounded-2xl border-2 border-emerald-300 bg-white p-5 shadow-[0_8px_28px_rgba(41,45,54,0.05)]">
+        <p className="leading-relaxed text-slate-700">{review.content}</p>
         <div className="mt-3 flex items-center justify-between">
-          <div className="flex text-yellow-400 gap-0.5">{'★'.repeat(5)}</div>
+          <div className="flex gap-0.5 text-yellow-400">{'★'.repeat(5)}</div>
           <button
             onClick={() => onPosted(review._id)}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-green-500 text-white hover:bg-green-600 active:scale-95 transition-all"
+            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 active:scale-95"
           >
             I Posted It!
           </button>
         </div>
-        <p className="text-xs text-gray-400 mt-2 text-center">Tap after posting review on Google</p>
+        <p className="mt-2 text-center text-xs text-slate-400">Tap after posting review on Google</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-5 transition-all hover:shadow-xl">
-      <p className="text-gray-800 leading-relaxed">{review.content}</p>
+    <div className="rounded-2xl border border-[#e9edf5] bg-white p-5 shadow-[0_8px_28px_rgba(41,45,54,0.05)] transition-all hover:shadow-xl">
+      <p className="leading-relaxed text-slate-700">{review.content}</p>
       <div className="mt-3 flex items-center justify-between">
-        <div className="flex text-yellow-400 gap-0.5">{'★'.repeat(5)}</div>
+        <div className="flex gap-0.5 text-yellow-400">{'★'.repeat(5)}</div>
         <button
           onClick={() => onCopy(review)}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all"
+          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700 active:scale-95"
         >
           Copy Review
         </button>

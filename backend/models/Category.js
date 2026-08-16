@@ -9,7 +9,6 @@ const categorySchema = new mongoose.Schema({
   },
   slug: {
     type: String,
-    required: true,
     trim: true,
     unique: true,
     lowercase: true
@@ -21,6 +20,29 @@ const categorySchema = new mongoose.Schema({
   aiPrompt: {
     type: String,
     trim: true
+  },
+  defaultPrompt: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  defaultTone: {
+    type: String,
+    enum: ['professional', 'friendly', 'casual', 'enthusiastic', 'grateful', 'humorous'],
+    default: 'friendly'
+  },
+  defaultLanguage: {
+    type: String,
+    enum: ['english', 'gujarati', 'hindi'],
+    default: 'english'
+  },
+  reviewPoolMin: {
+    type: Number,
+    default: 50
+  },
+  reviewBatchSize: {
+    type: Number,
+    default: 50
   },
   parentCategory: {
     type: mongoose.Schema.Types.ObjectId,
