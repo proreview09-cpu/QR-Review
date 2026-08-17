@@ -7,6 +7,7 @@ const navigation = [
   { to: '/admin', label: 'Dashboard', icon: 'dashboard' },
   { to: '/admin/shops', label: 'Businesses', icon: 'shop' },
   { to: '/admin/categories', label: 'Categories', icon: 'category' },
+  { to: '/admin/owners', label: 'Users', icon: 'people' },
   { to: '/admin/logs', label: 'Activity Logs', icon: 'activity' },
   { to: '/admin/ai', label: 'AI Providers', icon: 'ai' },
   { to: '/admin/settings', label: 'Settings', icon: 'settings' },
@@ -40,6 +41,8 @@ export default function Layout({ children }) {
         ? 'Businesses'
         : location.pathname.includes('/logs')
         ? 'Activity logs'
+        : location.pathname.includes('/owners')
+          ? 'Users'
         : location.pathname.includes('/categories')
           ? 'Categories'
         : location.pathname.includes('/ai')
@@ -123,6 +126,7 @@ function NavIcon({ type, active }) {
     settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-2.5v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H6v-2.5h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V5h2.5v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.2v2.5h-.2a1.7 1.7 0 0 0-1.5 1Z" /></>,
     ai: <><path d="M12 3v3" /><path d="M12 18v3" /><path d="M3 12h3" /><path d="M18 12h3" /><path d="m5.6 5.6 2.1 2.1" /><path d="m16.3 16.3 2.1 2.1" /><path d="m18.4 5.6-2.1 2.1" /><path d="m7.7 16.3-2.1 2.1" /><circle cx="12" cy="12" r="4" /></>,
     category: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3" /><path d="M12 19v3" /><path d="M2 12h3" /><path d="M19 12h3" /><path d="M4.9 4.9l2.1 2.1" /><path d="M17 17l2.1 2.1" /><path d="m19.1 4.9-2.1 2.1" /><path d="M7 17l-2.1 2.1" /></>,
+    people: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
   };
   return <svg className={`h-[19px] w-[19px] ${active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[type]}</svg>;
 }

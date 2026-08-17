@@ -16,6 +16,7 @@ const {
   updateSettings,
   generateGeneralPrompt,
   createOwner,
+  getUsers,
   resetOwnerPassword,
   impersonateOwner,
 } = require('../controllers/adminController');
@@ -40,6 +41,7 @@ router.get('/logs', getLogs);
 router.get('/ai-status', getAIStatus);
 router.post('/ai-status/check', checkAIStatus);
 router.post('/owners', createOwner);
+router.get('/users', getUsers);
 router.post('/shops/:id/reset-owner-password', resetOwnerPassword);
 router.post('/shops/:id/impersonate', impersonateOwner);
 

@@ -492,6 +492,29 @@ exports.updateSettings = async (req, res) => {
   }
 };
 
+exports.getUsers = async (req, res) => {
+  try {
+    const users = await User.find({ role: { $in: ['admin', 'shop_owner'] } })
+      .select('name email role isActive createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
+    const shops = await Shop.find({}).select('shopName owner').lean();
+    const shopByOwner = {};
+    shops.forEach((shop) => {
+      const ownerKey = String(shop.owner);
+      if (!shopByOwner[ownerKey]) shopByOwner[ownerKey] = [];
+      shopByOwner[ownerKey].push({ _id: shop._id, shopName: shop.shopName });
+    });
+    const result = users.map((user) => ({
+      ...user,
+      shops: shopByOwner[String(user._id)] || [],
+    }));
+    res.json({ users: result });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.createOwner = async (req, res) => {
   try {
     const { name, email, password } = req.body;
