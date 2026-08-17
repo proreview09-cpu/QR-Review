@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminShops from './pages/admin/Shops';
 import AdminAddShop from './pages/admin/AddShop';
@@ -33,6 +34,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route path="/review/:shopId" element={<ReviewPage />} />
 
       <Route path="/admin" element={<Layout><ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute></Layout>} />

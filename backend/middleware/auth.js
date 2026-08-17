@@ -14,11 +14,13 @@ const auth = (roles = []) => {
 
       if (user.role === 'shop_owner') {
         const shop = await Shop.findOne({ owner: user._id });
-        const expired = shop?.expiresAt && shop.expiresAt <= new Date();
-        if (!shop || !shop.isActive || expired) {
-          if (shop && expired) await Shop.findByIdAndUpdate(shop._id, { isActive: false });
-          if (expired) await User.findByIdAndUpdate(user._id, { isActive: false });
-          return res.status(401).json({ message: expired ? 'Account validity has expired' : 'Account is inactive' });
+        if (shop) {
+          const expired = shop.expiresAt && shop.expiresAt <= new Date();
+          if (!shop.isActive || expired) {
+            if (expired) await Shop.findByIdAndUpdate(shop._id, { isActive: false });
+            if (expired) await User.findByIdAndUpdate(user._id, { isActive: false });
+            return res.status(401).json({ message: expired ? 'Account validity has expired' : 'Account is inactive' });
+          }
         }
       }
 

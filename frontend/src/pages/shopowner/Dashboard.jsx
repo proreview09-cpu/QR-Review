@@ -31,6 +31,7 @@ export default function Dashboard() {
   const [activity, setActivity] = useState([]);
   const [shops, setShops] = useState([]);
   const [selectedShopId, setSelectedShopId] = useState('');
+  const [noShop, setNoShop] = useState(false);
 
   const fetchDashboard = (shopId) => {
     const qs = shopId ? `?shop=${shopId}` : '';
@@ -42,7 +43,13 @@ export default function Dashboard() {
       }
       setEditTone(result.shop.reviewTone);
       setEditLanguage(result.shop.language || 'english');
-    }).catch(console.error).finally(() => setLoading(false));
+    }).catch((err) => {
+      if (err.response?.status === 404) {
+        setNoShop(true);
+      } else {
+        console.error(err);
+      }
+    }).finally(() => setLoading(false));
     api.get(`/shop/reviews${qs}`).then(({ data: result }) => setActivity(result.reviews)).catch(() => {});
   };
 
@@ -78,6 +85,24 @@ export default function Dashboard() {
   };
 
   if (loading) return <Loading />;
+  if (noShop) {
+    return (
+      <div className="min-h-screen bg-[#f7f9fd]">
+        <header className="sticky top-0 z-20 flex h-[78px] items-center justify-between border-b border-[#e9edf5] bg-white/90 px-5 backdrop-blur-xl md:px-10">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-[14px] bg-gradient-to-br from-indigo-600 to-violet-500 text-sm font-extrabold text-white shadow-lg shadow-indigo-200">QR</span>
+            <span><strong className="block text-[17px] font-extrabold tracking-tight">QR <span className="text-indigo-600">Review</span></strong><small className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Business growth</small></span>
+          </div>
+          <button onClick={() => { logout(); navigate('/login'); }} className="ml-1 rounded-xl border border-[#e7eaf2] px-3 py-2 text-xs font-bold text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600">Logout</button>
+        </header>
+        <main className="mx-auto flex max-w-xl flex-col items-center px-5 py-16 text-center">
+          <span className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-indigo-100 text-2xl font-extrabold text-indigo-600">!</span>
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#17182d]">No business assigned yet</h1>
+          <p className="mt-3 text-sm text-slate-500">Your account is ready, but no business has been linked to it yet. Please contact the administrator to add your business, or share this page with them.</p>
+        </main>
+      </div>
+    );
+  }
   if (!data) return <div className="min-h-screen bg-[#f7f9fd] p-8 text-center text-red-500">Unable to load dashboard.</div>;
 
   const { shop, stats } = data;
