@@ -1,7 +1,52 @@
 const Shop = require('../models/Shop');
 const Review = require('../models/Review');
+const Category = require('../models/Category');
+const Setting = require('../models/Setting');
 const { generateReviews } = require('../services/openaiService');
+const { autocompletePlaces, getPlaceDetails, reviewUrlFromPlaceId } = require('../services/googleService');
 const { log } = require('../services/logService');
+
+exports.getPublicConfig = async (req, res) => {
+  try {
+    const clientIdSetting = await Setting.findOne({ key: 'googleClientId' });
+    res.json({ googleClientId: clientIdSetting?.value || '' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.googleAutocomplete = async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query || String(query).trim().length < 3) {
+      return res.status(400).json({ message: 'Type at least 3 characters' });
+    }
+    const suggestions = await autocompletePlaces(String(query).trim());
+    res.json({ suggestions });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.googlePlaceLookup = async (req, res) => {
+  try {
+    const { placeId } = req.body;
+    if (!placeId) return res.status(400).json({ message: 'placeId is required' });
+    const place = await getPlaceDetails(placeId);
+    res.json({ place });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getActiveCategories = async (req, res) => {
+  try {
+    const categories = await Category.find({ isActive: true }).select('name').sort({ name: 1 }).lean();
+    res.json({ categories });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 exports.getShopPublic = async (req, res) => {
   try {
@@ -26,7 +71,7 @@ exports.getShopPublic = async (req, res) => {
         _id: shop._id,
         shopName: shop.shopName,
         businessName: shop.businessName,
-        googleReviewUrl: shop.googleReviewUrl,
+googleReviewUrl: shop.googleReviewUrl || (shop.googlePlaceId ? reviewUrlFromPlaceId(shop.googlePlaceId) : ''),
         reviewTone: shop.reviewTone,
       },
       customerFields: (shop.customerFields || []).filter((field) => field.enabled),

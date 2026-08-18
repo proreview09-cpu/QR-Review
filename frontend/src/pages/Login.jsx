@@ -1,14 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import toast from 'react-hot-toast';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { user, loading: authLoading, login } = useAuth();
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState('');
+  const { user, loading: authLoading, login, googleSignIn } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    api.get('/public/config').then(({ data }) => setGoogleClientId(data.googleClientId || '')).catch(() => {});
+  }, []);
 
   if (authLoading) {
     return <div className="flex min-h-screen items-center justify-center bg-[#f7f9fd]"><div className="h-9 w-9 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" /></div>;
@@ -32,6 +40,19 @@ export default function Login() {
     }
   };
 
+  const handleGoogle = async (credential) => {
+    setGoogleLoading(true);
+    try {
+      const data = await googleSignIn(credential);
+      toast.success(data.created ? `Account created. Welcome, ${data.user.name}!` : `Welcome back, ${data.user.name}!`);
+      navigate(data.user.role === 'admin' ? '/admin' : '/dashboard');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Google sign-in failed');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f7f9fd]">
       <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-10">
@@ -42,6 +63,18 @@ export default function Login() {
         </div>
 
         <div className="rounded-2xl border border-[#e9edf5] bg-white p-8 shadow-[0_8px_28px_rgba(41,45,54,0.05)]">
+          {googleClientId && (
+            <>
+              <GoogleSignInButton clientId={googleClientId} onCredential={handleGoogle} onError={(msg) => toast.error(msg)} />
+              {googleLoading && <p className="mt-2 text-center text-xs font-bold text-slate-400">Signing in with Google...</p>}
+              <div className="my-5 flex items-center gap-3">
+                <span className="h-px flex-1 bg-[#e9edf5]" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">or</span>
+                <span className="h-px flex-1 bg-[#e9edf5]" />
+              </div>
+            </>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="mb-1 block text-sm font-bold text-slate-600">Email</label>

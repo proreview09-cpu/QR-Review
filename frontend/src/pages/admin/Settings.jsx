@@ -17,6 +17,8 @@ export default function Settings() {
   const [defaultTone, setDefaultTone] = useState('friendly');
   const [defaultLanguage, setDefaultLanguage] = useState('english');
   const [generalReviewPrompt, setGeneralReviewPrompt] = useState('');
+  const [googlePlacesApiKey, setGooglePlacesApiKey] = useState('');
+  const [googleClientId, setGoogleClientId] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -29,6 +31,8 @@ export default function Settings() {
       setDefaultTone(data.defaultTone || 'friendly');
       setDefaultLanguage(data.defaultLanguage || 'english');
       setGeneralReviewPrompt(data.generalReviewPrompt || '');
+      setGooglePlacesApiKey(data.googlePlacesApiKey || '');
+      setGoogleClientId(data.googleClientId || '');
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
@@ -52,7 +56,7 @@ export default function Settings() {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.put('/admin/settings', { aiProviders, defaultTone, defaultLanguage, generalReviewPrompt });
+      await api.put('/admin/settings', { aiProviders, defaultTone, defaultLanguage, generalReviewPrompt, googlePlacesApiKey, googleClientId });
       toast.success('Settings saved');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to save settings');
@@ -166,6 +170,21 @@ export default function Settings() {
               ))}
             </div>
           )}
+        </section>
+
+        <section className="rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
+          <h3 className="mb-1 text-lg font-extrabold">Google Places API</h3>
+          <p className="mb-6 text-sm text-slate-500">Used to search businesses on Google and auto-fill their name, address, phone, and review link during registration and shop creation.</p>
+          <div>
+            <label className="mb-1 block text-sm font-bold text-slate-600">Google Places API key</label>
+            <input type="password" value={googlePlacesApiKey} onChange={(e) => setGooglePlacesApiKey(e.target.value)} className="input" placeholder="AIza..." />
+            <p className="hint">Create it in Google Cloud Console &gt; APIs &amp; Services &gt; Credentials, and enable the "Places API (New)".</p>
+          </div>
+          <div className="mt-5">
+            <label className="mb-1 block text-sm font-bold text-slate-600">Google Client ID (Sign in with Google)</label>
+            <input type="text" value={googleClientId} onChange={(e) => setGoogleClientId(e.target.value)} className="input" placeholder="xxxxxxxx.apps.googleusercontent.com" />
+            <p className="hint">From Google Cloud Console &gt; APIs &amp; Services &gt; Credentials &gt; OAuth 2.0 Client IDs &gt; Web application. Add your site URL to "Authorized JavaScript origins". Shows the Google button on login and registration.</p>
+          </div>
         </section>
 
         <section className="rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">

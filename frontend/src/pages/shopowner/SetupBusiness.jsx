@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link, Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import api from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import api from '../../services/api';
 import toast from 'react-hot-toast';
-import GoogleLookup from '../components/GoogleLookup';
-import GoogleSignInButton from '../components/GoogleSignInButton';
+import GoogleLookup from '../../components/GoogleLookup';
 
 const TONES = [
   { value: 'professional', label: 'Professional' },
@@ -31,23 +29,19 @@ const CUSTOMER_FIELDS = [
   { key: 'note', label: 'Note / feedback' },
 ];
 
-const STEPS = ['Account', 'Business', 'Review settings'];
+const STEPS = ['Business', 'Review settings'];
 
-export default function Register() {
+export default function SetupBusiness() {
   const navigate = useNavigate();
-  const { user, loading: authLoading, register, googleSignIn } = useAuth();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [categories, setCategories] = useState([]);
   const [catsLoading, setCatsLoading] = useState(true);
   const [showOtherCategory, setShowOtherCategory] = useState(false);
-  const [googleClientId, setGoogleClientId] = useState('');
-  const [googleLoading, setGoogleLoading] = useState(false);
-
-  const [account, setAccount] = useState({ name: '', email: '', password: '', confirm: '' });
-  const [business, setBusiness] = useState({ businessName: '', shopName: '', phone: '', address: '', googleReviewUrl: '', googlePlaceId: '' });
   const [matchedGoogle, setMatchedGoogle] = useState(null);
+
+  const [business, setBusiness] = useState({ businessName: '', shopName: '', phone: '', address: '', googleReviewUrl: '', googlePlaceId: '' });
   const [settings, setSettings] = useState({
     category: '', customCategoryName: '', reviewTone: 'friendly', language: 'english', promptMode: 'combine', aiPrompt: '',
     customerFields: CUSTOMER_FIELDS.map((field) => ({ ...field, enabled: false, required: false })),
@@ -58,42 +52,16 @@ export default function Register() {
       .then(({ data }) => setCategories(data.categories))
       .catch(() => {})
       .finally(() => setCatsLoading(false));
-    api.get('/public/config').then(({ data }) => setGoogleClientId(data.googleClientId || '')).catch(() => {});
   }, []);
 
-  if (authLoading) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#f7f9fd]"><div className="h-9 w-9 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" /></div>;
-  }
-
-  if (user) {
-    return <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} />;
-  }
-
-  const setAccountField = (e) => setAccount({ ...account, [e.target.name]: e.target.value });
   const setBusinessField = (e) => setBusiness({ ...business, [e.target.name]: e.target.value });
 
   const next = () => {
-    if (step === 0) {
-      if (!account.name.trim() || !account.email.trim() || !account.password) {
-        toast.error('Please fill all account fields');
-        return;
-      }
-      if (account.password.length < 6) {
-        toast.error('Password must be at least 6 characters');
-        return;
-      }
-      if (account.password !== account.confirm) {
-        toast.error('Passwords do not match');
-        return;
-      }
+    if (!business.businessName.trim() || !business.shopName.trim() || !business.googleReviewUrl.trim()) {
+      toast.error('Please fill business name, shop name and Google review link');
+      return;
     }
-    if (step === 1) {
-      if (!business.businessName.trim() || !business.shopName.trim() || !business.googleReviewUrl.trim()) {
-        toast.error('Please fill business name, shop name and Google review link');
-        return;
-      }
-    }
-    setStep(step + 1);
+    setStep(1);
   };
 
   const handleCategoryChange = (e) => {
@@ -125,31 +93,13 @@ export default function Register() {
     e.preventDefault();
     setLoading(true);
     try {
-      const shopPayload = {
-        ...business,
-        ...settings,
-        canOwnerSetTone: true,
-      };
-      const data = await register(account.name, account.email, account.password, shopPayload);
-      toast.success(`Account created. Welcome, ${data.user.name}!`);
+      const { data } = await api.post('/shop/my-shop', { ...business, ...settings });
+      toast.success('Your business is ready!');
       setResult(data);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Registration failed');
+      toast.error(err.response?.data?.message || 'Failed to create business');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleGoogle = async (credential) => {
-    setGoogleLoading(true);
-    try {
-      const data = await googleSignIn(credential);
-      toast.success(`Signed up with Google. Welcome, ${data.user.name}!`);
-      navigate('/dashboard');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Google sign-up failed');
-    } finally {
-      setGoogleLoading(false);
     }
   };
 
@@ -159,23 +109,18 @@ export default function Register() {
         <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-10">
           <div className="mb-8 text-center">
             <span className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-emerald-100 text-2xl text-emerald-600">✓</span>
-            <h1 className="text-3xl font-extrabold tracking-tight text-[#17182d]">You're all set!</h1>
-            <p className="mt-2 text-sm text-slate-500">Your account and business were created successfully.</p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-[#17182d]">Your business is ready!</h1>
+            <p className="mt-2 text-sm text-slate-500">Reviews are being generated — they'll appear in a few minutes.</p>
           </div>
           <div className="rounded-2xl border border-[#e9edf5] bg-white p-8 shadow-[0_8px_28px_rgba(41,45,54,0.05)]">
-            {result.shop && (
-              <div className="mb-6">
-                <p className="mb-1 text-sm text-slate-500">Your review link</p>
-                <div className="flex items-center gap-2">
-                  <input readOnly value={result.shop.reviewLink} className="input flex-1 bg-slate-50 text-sm" />
-                  <button onClick={() => { navigator.clipboard.writeText(result.shop.reviewLink); toast.success('Link copied!'); }}
-                    className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700">Copy</button>
-                </div>
-                <p className="mt-2 text-xs text-slate-400">Share this link with your customers. Reviews are being generated — they'll appear in a few minutes.</p>
-              </div>
-            )}
+            <p className="mb-1 text-sm text-slate-500">Your review link</p>
+            <div className="flex items-center gap-2">
+              <input readOnly value={result.reviewLink} className="input flex-1 bg-slate-50 text-sm" />
+              <button onClick={() => { navigator.clipboard.writeText(result.reviewLink); toast.success('Link copied!'); }}
+                className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700">Copy</button>
+            </div>
             <button onClick={() => navigate('/dashboard')}
-              className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-500 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5">
+              className="mt-5 w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-500 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5">
               Go to my dashboard
             </button>
           </div>
@@ -189,8 +134,8 @@ export default function Register() {
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-4 py-10">
         <div className="mb-8 text-center">
           <span className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-500 text-lg font-extrabold text-white shadow-lg shadow-indigo-200">QR</span>
-          <h1 className="text-3xl font-extrabold tracking-tight text-[#17182d]">Create your account</h1>
-          <p className="mt-2 text-sm text-slate-500">Set up your account and business — takes less than a minute</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-[#17182d]">Set up your business</h1>
+          <p className="mt-2 text-sm text-slate-500">Link your Google Business to your account — takes less than a minute</p>
         </div>
 
         <div className="mb-6 flex items-center justify-center gap-2">
@@ -205,41 +150,6 @@ export default function Register() {
 
         <div className="rounded-2xl border border-[#e9edf5] bg-white p-8 shadow-[0_8px_28px_rgba(41,45,54,0.05)]">
           {step === 0 && (
-            <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); next(); }}>
-              {googleClientId && (
-                <>
-                  <GoogleSignInButton clientId={googleClientId} onCredential={handleGoogle} onError={(msg) => toast.error(msg)} />
-                  {googleLoading && <p className="text-center text-xs font-bold text-slate-400">Signing up with Google...</p>}
-                  <div className="flex items-center gap-3">
-                    <span className="h-px flex-1 bg-[#e9edf5]" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">or sign up with email</span>
-                    <span className="h-px flex-1 bg-[#e9edf5]" />
-                  </div>
-                </>
-              )}
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-600">Full name</label>
-                <input name="name" value={account.name} onChange={setAccountField} className="input" required placeholder="Your name" />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-600">Email</label>
-                <input name="email" type="email" value={account.email} onChange={setAccountField} className="input" required placeholder="you@example.com" />
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-bold text-slate-600">Password</label>
-                  <input name="password" type="password" value={account.password} onChange={setAccountField} className="input" required placeholder="At least 6 characters" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-bold text-slate-600">Confirm password</label>
-                  <input name="confirm" type="password" value={account.confirm} onChange={setAccountField} className="input" required placeholder="Repeat password" />
-                </div>
-              </div>
-              <button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-500 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5">Continue</button>
-            </form>
-          )}
-
-          {step === 1 && (
             <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); next(); }}>
               <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
                 <GoogleLookup
@@ -282,16 +192,13 @@ export default function Register() {
               <div>
                 <label className="mb-1 block text-sm font-bold text-slate-600">Google review link</label>
                 <input name="googleReviewUrl" type="url" value={business.googleReviewUrl} onChange={setBusinessField} className="input" required placeholder="https://search.google.com/local/writereview?placeid=..." />
-                <p className="hint">Google Business Profile &gt; Ask for reviews &gt; Copy link.</p>
+                <p className="hint">Google Business Profile &gt; Ask for reviews &gt; Copy link. Auto-filled when you pick your business from Google.</p>
               </div>
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setStep(0)} className="rounded-2xl border border-slate-200 px-5 py-3.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Back</button>
-                <button type="submit" className="flex-1 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-500 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5">Continue</button>
-              </div>
+              <button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-500 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5">Continue</button>
             </form>
           )}
 
-          {step === 2 && (
+          {step === 1 && (
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="mb-1 block text-sm font-bold text-slate-600">Category</label>
@@ -358,18 +265,14 @@ export default function Register() {
                 </div>
               </div>
               <div className="flex gap-3">
-                <button type="button" onClick={() => setStep(1)} className="rounded-2xl border border-slate-200 px-5 py-3.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Back</button>
+                <button type="button" onClick={() => setStep(0)} className="rounded-2xl border border-slate-200 px-5 py-3.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Back</button>
                 <button type="submit" disabled={loading} className="flex-1 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-500 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5 disabled:opacity-50">
-                  {loading ? 'Creating your account...' : 'Create account & business'}
+                  {loading ? 'Creating your business...' : 'Create my business'}
                 </button>
               </div>
             </form>
           )}
         </div>
-        <p className="mt-5 text-center text-sm text-slate-500">
-          Already have an account?{' '}
-          <Link to="/login" className="font-bold text-indigo-600 hover:underline">Sign in</Link>
-        </p>
       </div>
     </div>
   );

@@ -9,6 +9,8 @@ const ActivityLog = require('../models/ActivityLog');
 const AIProviderStatus = require('../models/AIProviderStatus');
 const { generateQR } = require('../services/qrService');
 const { generateReviews, checkAIProviders, generateGeneralPrompt } = require('../services/openaiService');
+const { reviewUrlFromPlaceId } = require('../services/googleService');
+const { notifyOwner } = require('../services/notificationService');
 const { log } = require('../services/logService');
 
 const AI_PROVIDER_LABELS = {
@@ -149,7 +151,7 @@ exports.getShops = async (req, res) => {
 
 exports.createShop = async (req, res) => {
   try {
-    const { ownerEmail, ownerName, ownerPassword, shopName, businessName, googleReviewUrl, reviewTone, address, phone, language, aiPrompt, promptMode, customerFields, canOwnerSetTone, reviewPoolMin, reviewBatchSize, validityDays, category } = req.body;
+    const { ownerEmail, ownerName, ownerPassword, shopName, businessName, googleReviewUrl, reviewTone, address, phone, language, aiPrompt, promptMode, customerFields, canOwnerSetTone, reviewPoolMin, reviewBatchSize, validityDays, category, googlePlaceId } = req.body;
 
     let owner = await User.findOne({ email: ownerEmail?.toLowerCase() });
     if (!owner) {
@@ -165,7 +167,7 @@ exports.createShop = async (req, res) => {
       shopName,
       businessName,
       ownerName,
-      googleReviewUrl,
+      googleReviewUrl: googleReviewUrl || (googlePlaceId ? reviewUrlFromPlaceId(googlePlaceId) : ''),
       reviewTone: reviewTone || 'friendly',
       address: address || '',
       phone: phone || '',
@@ -179,6 +181,7 @@ exports.createShop = async (req, res) => {
       reviewBatchSize: reviewBatchSize || 50,
       category: category || null,
       owner: owner._id,
+      googlePlaceId: googlePlaceId || '',
     });
 
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
@@ -196,6 +199,7 @@ exports.createShop = async (req, res) => {
         phone: shop.phone,
       });
       await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
+      notifyOwner(owner._id, shop._id, `${reviews.length} reviews generated for "${shopName}" — your review pool is ready!`, 'success');
       log('CREATE', 'reviews', `Generated ${reviews.length} reviews for "${shopName}"`, { performedBy: req.user.email, shop: shop._id });
     } catch (genErr) {
       console.error('Review generation failed, using fallback:', genErr.message);
@@ -234,6 +238,7 @@ exports.updateShop = async (req, res) => {
           phone: shop.phone,
         }, excludeTexts);
         await Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
+        notifyOwner(shop.owner?._id || shop.owner, shop._id, `Reviews regenerated for "${shop.shopName}" — your review pool is updated!`, 'info');
       } catch (genErr) {
         console.error('Review regeneration failed:', genErr.message);
       }
@@ -407,6 +412,8 @@ exports.getSettings = async (req, res) => {
     const defaultTone = await Setting.findOne({ key: 'defaultTone' });
     const defaultLanguage = await Setting.findOne({ key: 'defaultLanguage' });
     const generalReviewPrompt = await Setting.findOne({ key: 'generalReviewPrompt' });
+    const googlePlacesApiKey = await Setting.findOne({ key: 'googlePlacesApiKey' });
+    const googleClientId = await Setting.findOne({ key: 'googleClientId' });
     res.json({
       openaiApiKey: openaiKey?.value || '',
       aiProviders: Array.isArray(aiProviders?.value)
@@ -415,6 +422,8 @@ exports.getSettings = async (req, res) => {
       defaultTone: defaultTone?.value || 'friendly',
       defaultLanguage: defaultLanguage?.value || 'english',
       generalReviewPrompt: generalReviewPrompt?.value || '',
+      googlePlacesApiKey: googlePlacesApiKey?.value || '',
+      googleClientId: googleClientId?.value || '',
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -436,7 +445,7 @@ exports.generateGeneralPrompt = async (req, res) => {
 
 exports.updateSettings = async (req, res) => {
   try {
-    const { openaiApiKey, aiProviders, defaultTone, defaultLanguage, generalReviewPrompt } = req.body;
+    const { openaiApiKey, aiProviders, defaultTone, defaultLanguage, generalReviewPrompt, googlePlacesApiKey, googleClientId } = req.body;
     if (openaiApiKey !== undefined) {
       await Setting.findOneAndUpdate(
         { key: 'openaiApiKey' },
@@ -482,6 +491,20 @@ exports.updateSettings = async (req, res) => {
       await Setting.findOneAndUpdate(
         { key: 'generalReviewPrompt' },
         { value: generalReviewPrompt },
+        { upsert: true, new: true },
+      );
+    }
+    if (googlePlacesApiKey !== undefined) {
+      await Setting.findOneAndUpdate(
+        { key: 'googlePlacesApiKey' },
+        { value: String(googlePlacesApiKey).trim() },
+        { upsert: true, new: true },
+      );
+    }
+    if (googleClientId !== undefined) {
+      await Setting.findOneAndUpdate(
+        { key: 'googleClientId' },
+        { value: String(googleClientId).trim() },
         { upsert: true, new: true },
       );
     }

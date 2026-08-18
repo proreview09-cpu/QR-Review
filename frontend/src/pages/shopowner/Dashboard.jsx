@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
@@ -32,6 +32,45 @@ export default function Dashboard() {
   const [shops, setShops] = useState([]);
   const [selectedShopId, setSelectedShopId] = useState('');
   const [noShop, setNoShop] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unread, setUnread] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef(null);
+
+  const fetchNotifications = (showToast = false) => {
+    api.get('/shop/notifications').then(({ data }) => {
+      setNotifications(data.notifications || []);
+      if (showToast && data.unread > unread && data.unread > 0) {
+        const latest = (data.notifications || [])[0];
+        if (latest) toast.success(latest.message);
+      }
+      setUnread(data.unread || 0);
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchNotifications(true);
+    const timer = setInterval(() => fetchNotifications(true), 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const openNotifications = async () => {
+    setNotifOpen((current) => !current);
+    if (!notifOpen && unread > 0) {
+      try {
+        await api.post('/shop/notifications/read');
+        setUnread(0);
+      } catch { /* ignore */ }
+    }
+  };
 
   const fetchDashboard = (shopId) => {
     const qs = shopId ? `?shop=${shopId}` : '';
@@ -97,8 +136,11 @@ export default function Dashboard() {
         </header>
         <main className="mx-auto flex max-w-xl flex-col items-center px-5 py-16 text-center">
           <span className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-indigo-100 text-2xl font-extrabold text-indigo-600">!</span>
-          <h1 className="text-2xl font-extrabold tracking-tight text-[#17182d]">No business assigned yet</h1>
-          <p className="mt-3 text-sm text-slate-500">Your account is ready, but no business has been linked to it yet. Please contact the administrator to add your business, or share this page with them.</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#17182d]">No business linked yet</h1>
+          <p className="mt-3 text-sm text-slate-500">Set up your business now — link your Google Business, get your review link and QR code. Takes less than a minute.</p>
+          <button onClick={() => navigate('/setup-business')} className="mt-6 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-500 px-8 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5">
+            Set up my business
+          </button>
         </main>
       </div>
     );
@@ -120,6 +162,35 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           {isAdminPreview && <span className="hidden rounded-full bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-700 sm:inline-flex">Admin preview</span>}
+          <div ref={notifRef} className="relative">
+            <button onClick={openNotifications} className="relative grid h-10 w-10 place-items-center rounded-full border border-[#e7eaf2] bg-white text-slate-500 transition hover:bg-slate-50" aria-label="Notifications">
+              <svg className="h-[19px] w-[19px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {unread > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold text-white">{unread}</span>}
+            </button>
+            {notifOpen && (
+              <div className="absolute right-0 top-12 z-40 w-80 rounded-2xl border border-[#e9edf5] bg-white shadow-[0_18px_50px_rgba(41,45,54,0.15)]">
+                <div className="flex items-center justify-between border-b border-[#e9edf5] px-4 py-3">
+                  <p className="text-sm font-extrabold">Notifications</p>
+                  {notifications.length > 0 && <button onClick={openNotifications} className="text-xs font-bold text-slate-400 hover:text-slate-600">Close</button>}
+                </div>
+                <div className="max-h-72 overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <p className="px-4 py-8 text-center text-sm text-slate-400">No notifications yet.</p>
+                  ) : (
+                    notifications.map((n) => (
+                      <div key={n._id} className="border-b border-slate-50 px-4 py-3">
+                        <p className="text-sm text-slate-700">{n.message}</p>
+                        <p className="mt-1 text-[11px] text-slate-400">{new Date(n.createdAt).toLocaleString()}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <span className="hidden text-right sm:block"><strong className="block text-sm font-bold">{user?.name}</strong><small className="text-xs text-slate-400">Business owner</small></span>
           <span className="grid h-10 w-10 place-items-center rounded-full bg-indigo-100 text-xs font-extrabold text-indigo-700">{user?.name?.slice(0, 2).toUpperCase()}</span>
           <button onClick={isAdminPreview ? exitAdminPreview : () => { logout(); navigate('/login'); }} className="ml-1 rounded-xl border border-[#e7eaf2] px-3 py-2 text-xs font-bold text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600">{isAdminPreview ? 'Exit preview' : 'Logout'}</button>
@@ -275,6 +346,35 @@ export default function Dashboard() {
             <button onClick={handleSave} disabled={saving} className="mt-5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5 disabled:opacity-50">{saving ? 'Updating...' : 'Save preferences'}</button>
           </section>
         )}
+
+        <section className="mt-6 rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.045)]">
+          <div className="mb-5 flex items-center justify-between">
+            <div><h2 className="text-lg font-extrabold">QR code</h2><p className="mt-1 text-xs text-slate-400">Scan to write a review — print it or share it with your customers</p></div>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-50 text-sm font-extrabold text-indigo-600">Q</span>
+          </div>
+          <div className="flex flex-col items-center gap-6 md:flex-row">
+            {shop.qrCodeData ? (
+              <img src={shop.qrCodeData} alt={`QR code for ${shop.shopName}`} className="w-52 rounded-2xl border border-[#e9edf5] bg-white p-2" />
+            ) : (
+              <div className="grid h-52 w-52 place-items-center rounded-2xl bg-[#f8f9fc] text-sm font-bold text-slate-400">QR not available</div>
+            )}
+            <div className="text-center md:text-left">
+              <p className="text-sm font-extrabold text-slate-700">{shop.shopName}</p>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-3 md:justify-start">
+                {shop.qrCodeData && (
+                  <a
+                    href={shop.qrCodeData}
+                    download={`${shop.shopName}-qr.png`}
+                    className="rounded-xl bg-gradient-to-r from-indigo-600 to-violet-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5"
+                  >
+                    Download QR
+                  </a>
+                )}
+                <button onClick={() => { window.print(); }} className="rounded-xl border border-[#e7eaf2] bg-white px-5 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50">Print</button>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
   );

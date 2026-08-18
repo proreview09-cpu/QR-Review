@@ -1,7 +1,83 @@
 const Shop = require('../models/Shop');
 const Review = require('../models/Review');
 const TokenUsage = require('../models/TokenUsage');
+const Category = require('../models/Category');
 const { generateReviews } = require('../services/openaiService');
+const { generateQR } = require('../services/qrService');
+const { reviewUrlFromPlaceId } = require('../services/googleService');
+const { log } = require('../services/logService');
+const { notifyOwner } = require('../services/notificationService');
+const Notification = require('../models/Notification');
+
+function expiryFromDays(value) {
+  if (!value || value === 0) return null;
+  return new Date(Date.now() + Number(value) * 24 * 60 * 60 * 1000);
+}
+
+exports.createMyShop = async (req, res) => {
+  try {
+    const existing = await Shop.findOne({ owner: req.user._id });
+    if (existing) return res.status(400).json({ message: 'You already have a business linked to your account' });
+
+    const { shopName, businessName, googleReviewUrl, reviewTone, address, phone, language, aiPrompt, promptMode, customerFields, googlePlaceId, category, customCategoryName, validityDays, reviewPoolMin, reviewBatchSize } = req.body;
+    if (!shopName || !businessName) return res.status(400).json({ message: 'Business name and shop name are required' });
+
+    let categoryId = category || null;
+    if (!categoryId && customCategoryName) {
+      const cat = await Category.create({
+        name: customCategoryName,
+        description: '',
+        defaultTone: reviewTone || 'friendly',
+        defaultLanguage: language || 'english',
+        isActive: true,
+      });
+      categoryId = cat._id;
+    }
+
+    const shop = await Shop.create({
+      shopName,
+      businessName,
+      ownerName: req.user.name,
+      googleReviewUrl: googleReviewUrl || (googlePlaceId ? reviewUrlFromPlaceId(googlePlaceId) : ''),
+      reviewTone: reviewTone || 'friendly',
+      address: address || '',
+      phone: phone || '',
+      language: language || 'english',
+      aiPrompt: aiPrompt || '',
+      promptMode: promptMode === 'override' ? 'override' : 'combine',
+      customerFields: Array.isArray(customerFields) ? customerFields : [],
+      canOwnerSetTone: true,
+      expiresAt: expiryFromDays(validityDays === undefined ? 30 : validityDays),
+      reviewPoolMin: reviewPoolMin || 50,
+      reviewBatchSize: reviewBatchSize || 50,
+      category: categoryId,
+      owner: req.user._id,
+      googlePlaceId: googlePlaceId || '',
+    });
+
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:5175';
+    const { url, qrDataUrl } = await generateQR(shop._id.toString(), `${protocol}://${host}`);
+    shop.qrCodeData = qrDataUrl;
+    await shop.save();
+
+    generateReviews(shop.shopName, shop.businessName, shop.reviewTone, shop.reviewBatchSize || 50, shop.language, shop._id, shop.aiPrompt || '', shop.promptMode || 'combine', {
+      ownerName: shop.ownerName,
+      address: shop.address,
+      phone: shop.phone,
+    })
+      .then((reviews) => {
+        Review.insertMany(reviews.map((content) => ({ shop: shop._id, content })));
+        notifyOwner(req.user._id, shop._id, `${reviews.length} reviews generated for "${shop.shopName}" — your review pool is ready!`, 'success');
+      })
+      .catch((genErr) => console.error('Review generation failed after shop setup (background):', genErr.message));
+
+    log('CREATE', 'shop', `Shop "${shop.shopName}" created by owner via setup wizard`, { performedBy: req.user.email, shop: shop._id });
+    res.status(201).json({ shop, reviewLink: url });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 function resolveSelectedShop(shops, requestedId) {
   if (requestedId && shops.some((shop) => shop._id.toString() === requestedId)) {
@@ -97,6 +173,27 @@ exports.getMyShopReviews = async (req, res) => {
       .select('content isUsed usedAt isPosted postedAt customerDetails');
 
     res.json({ reviews });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getMyNotifications = async (req, res) => {
+  try {
+    const notifications = await Notification.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(30)
+      .lean();
+    res.json({ notifications, unread: notifications.filter((n) => !n.read).length });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.markNotificationsRead = async (req, res) => {
+  try {
+    await Notification.updateMany({ user: req.user._id, read: false }, { read: true });
+    res.json({ message: 'Notifications marked as read' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

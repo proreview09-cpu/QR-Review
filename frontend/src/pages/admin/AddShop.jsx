@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import PromptVariables from '../../components/PromptVariables';
+import GoogleLookup from '../../components/GoogleLookup';
 
 const TONES = [
   { value: 'professional', label: 'Professional' },
@@ -42,7 +43,7 @@ const CUSTOMER_FIELDS = [
 const emptyForm = () => ({
   ownerEmail: '', ownerName: '', ownerPassword: '',
   businessName: '', shopName: '', address: '', phone: '',
-  googleReviewUrl: '', reviewTone: 'friendly', language: 'english',
+  googleReviewUrl: '', googlePlaceId: '', reviewTone: 'friendly', language: 'english',
   canOwnerSetTone: false, validityDays: 30, reviewPoolMin: 50, reviewBatchSize: 50,
   category: '', customCategoryName: '', aiPrompt: '', promptMode: 'combine',
   customerFields: CUSTOMER_FIELDS.map((field) => ({ ...field, enabled: false, required: false })),
@@ -57,6 +58,7 @@ export default function AddShop() {
   const [form, setForm] = useState(emptyForm());
   const [result, setResult] = useState(null);
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
+  const [matchedGoogle, setMatchedGoogle] = useState(null);
 
   const fetchCategories = () => {
     api.get('/admin/categories?activeOnly=true')
@@ -213,6 +215,24 @@ export default function AddShop() {
         <section className="rounded-2xl border border-[#e9edf5] bg-white p-6 shadow-[0_8px_28px_rgba(41,45,54,0.05)] md:p-8">
           <h3 className="mb-1 text-lg font-extrabold">Business details</h3>
           <p className="mb-6 text-xs text-slate-400">Information shown on the customer review page and used by AI to write reviews.</p>
+          <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+            <GoogleLookup
+              selected={matchedGoogle}
+              onClear={() => { setMatchedGoogle(null); setForm({ ...form, businessName: '', shopName: '', address: '', phone: '', googlePlaceId: '', googleReviewUrl: '' }); }}
+              onFetched={(place) => {
+                setMatchedGoogle({ name: place.name, placeId: place.placeId });
+                setForm({
+                  ...form,
+                  businessName: place.name || form.businessName,
+                  shopName: place.name || form.shopName,
+                  address: place.address || form.address,
+                  phone: place.phone || form.phone,
+                  googlePlaceId: place.placeId,
+                  googleReviewUrl: form.googleReviewUrl || `https://search.google.com/local/writereview?placeid=${encodeURIComponent(place.placeId)}`,
+                });
+              }}
+            />
+          </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="Business name" hint="Exact name shown on Google Business Profile.">
               <input name="businessName" value={form.businessName} onChange={handleChange} required className="input" placeholder="ABC Stores Pvt Ltd" />
